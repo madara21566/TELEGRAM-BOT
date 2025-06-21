@@ -1,19 +1,3 @@
-
-import os
-import re
-import csv
-import time
-import pandas as pd
-from datetime import datetime
-from collections import defaultdict
-from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-from telegram.helpers import mention_html
-from io import StringIO
-
-# Load token from environment
-
 import os
 import re
 import csv
