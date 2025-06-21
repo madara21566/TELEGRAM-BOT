@@ -13,13 +13,6 @@ from telegram.helpers import mention_html
 from io import StringIO
 
 # Load token from environment
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-OWNER_ID = 7640327597  # Replace with your actual Telegram user ID
-bot = Bot(token=TOKEN)
-
-app = Flask(__name__)
-application = ApplicationBuilder().token(TOKEN).build()
-
 
 import os
 import re
