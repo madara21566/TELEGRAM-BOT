@@ -12,7 +12,7 @@ from telegram.helpers import mention_html
 from io import StringIO
 
 # Load token from environment
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TOKEN = os.getenv("7727685861:AAE_tR7qsTx-_NlxfwQ-JgqeJDkpvnXEYkg")
 OWNER_ID = 7640327597  # Replace with your actual Telegram user ID
 bot = Bot(token=TOKEN)
 
