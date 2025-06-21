@@ -589,27 +589,3 @@ async def process_numbers(update, context, numbers):
         )
         await update.message.reply_document(document=open(file_path, "rb"))
         os.remove(file_path)
-
-if __name__ == '__main__':
-    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-    
-    # Command handlers
-    app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('setfilename', set_filename))
-    app.add_handler(CommandHandler('setcontactname', set_contact_name))
-    app.add_handler(CommandHandler('setlimit', set_limit))
-    app.add_handler(CommandHandler('setstart', set_start))
-    app.add_handler(CommandHandler('setvcfstart', set_vcf_start))
-    app.add_handler(CommandHandler('makevcf', make_vcf_command))
-    app.add_handler(CommandHandler('merge', merge_command))
-    app.add_handler(CommandHandler('done', done_merge))
-    app.add_handler(CommandHandler('panel', owner_panel))
-    app.add_handler(CommandHandler('exportusers', export_users))
-    
-    # Callback and message handlers
-    app.add_handler(CallbackQueryHandler(handle_callback))
-    app.add_handler(MessageHandler(filters.TEXT & (filters.User(user_id=OWNER_ID) | filters.User(user_id=GROUP_ADMINS)), handle_owner_input))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    
-    app.run_polling()
