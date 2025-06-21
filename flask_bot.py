@@ -14,7 +14,7 @@ from io import StringIO
 # Load token from environment
 TOKEN = os.getenv("7727685861:AAE_tR7qsTx-_NlxfwQ-JgqeJDkpvnXEYkg")
 OWNER_ID = 7640327597  # Replace with your actual Telegram user ID
-bot = Bot(token=TOKEN)
+bot = Bot(token=7727685861:AAE_tR7qsTx-_NlxfwQ-JgqeJDkpvnXEYkg)
 
 app = Flask(__name__)
 application = ApplicationBuilder().token(TOKEN).build()
