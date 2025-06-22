@@ -28,7 +28,7 @@ from telegram.helpers import mention_html
 from io import StringIO
 
 # Configuration
-TELEGRAM_BOT_TOKEN = '7727685861:AAFtFFgIZcpZR-YvTcG7EinP1OPRSs_qbsY'
+TELEGRAM_BOT_TOKEN = '7727685861:AAE_tR7qsTx-_NlxfwQ-JgqeJDkpvnXEYkg'
 OWNER_ID = 7640327597  # Replace with your actual Telegram user ID
 
 # Default settings
