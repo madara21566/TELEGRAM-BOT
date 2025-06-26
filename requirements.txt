@@ -1,4 +1,4 @@
-Flask
-python-telegram-bot==20.7
 pandas
+Flask==2.2.5
+python-telegram-bot==20.3
 aiohttp
