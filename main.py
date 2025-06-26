@@ -49,7 +49,7 @@ def webhook():
 
 @app.route("/")
 def home():
-    return "âœ… Bot is running on Render with Webhook!"
+    return "✅ Bot is running on Render with Webhook!"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
