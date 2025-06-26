@@ -2,7 +2,10 @@ import os
 import asyncio
 from flask import Flask, request
 from telegram import Update, Bot
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler, filters,
+    CallbackQueryHandler, ContextTypes
+)
 from NIKALLLLLLL import (
     start, set_filename, set_contact_name, set_limit, set_start,
     set_vcf_start, make_vcf_command, merge_command, done_merge,
@@ -46,7 +49,7 @@ def webhook():
 
 @app.route("/")
 def home():
-    return "✅ Bot is running on Render with Webhook!"
+    return "âœ… Bot is running on Render with Webhook!"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
