@@ -12,6 +12,7 @@ from io import StringIO
 
 # Configuration
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
+BOT_USERNAME = os.environ.get("BOT_USERNAME")
 OWNER_ID = 7640327597  # Replace with your actual Telegram user ID
 
 # Default settings
