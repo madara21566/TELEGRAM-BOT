@@ -17,8 +17,8 @@ from NIKALLLLLLL import (
     handle_document, handle_text
 )
 
-BOT_TOKEN = 7869581039:AAGWWs3d75a0PXjCwG59JFDtqkkPicuRPWQ # Set in Render Environment
-BOT_USERNAME = godmadarafile_bot  # e.g., godmadarafile_bot
+BOT_TOKEN = "7869581039:AAGWWs3d75a0PXjCwG59JFDtqkkPicuRPWQ"
+BOT_USERNAME = "godmadarafile_bot"
 
 # Flask App
 app = Flask(__name__)
