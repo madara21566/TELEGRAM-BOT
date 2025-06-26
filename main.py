@@ -11,7 +11,7 @@ from NIKALLLLLLL import (
 )
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-BOT_USERNAME = os.environ.get("BOT_USERNAME")  # e.g., mybot123
+BOT_USERNAME = os.environ.get("BOT_USERNAME")  # e.g., godmadarafile_bot
 
 app = Flask(__name__)
 bot = Bot(token=BOT_TOKEN)
