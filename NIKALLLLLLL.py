@@ -11,8 +11,8 @@ from telegram.helpers import mention_html
 from io import StringIO
 
 # Configuration
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-BOT_USERNAME = os.environ.get("BOT_USERNAME")
+BOT_TOKEN = 7869581039:AAGWWs3d75a0PXjCwG59JFDtqkkPicuRPWQ
+BOT_USERNAME = godmadarafile_bot
 OWNER_ID = 7640327597  # Replace with your actual Telegram user ID
 
 # Default settings
