@@ -1,5 +1,5 @@
 pandas
 Flask==2.2.5
-python-telegram-bot==20.6
+python-telegram-bot==20.3
 aiohttp
 python-telegram-bot[webhooks]
