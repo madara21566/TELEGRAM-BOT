@@ -1,4 +1,5 @@
 import os
+import asyncio
 from flask import Flask, request
 from telegram import Update, Bot
 from telegram.ext import (
@@ -9,7 +10,6 @@ from telegram.ext import (
     filters,
 )
 
-# Aapke NIKALLLLLLL module se handlers import
 from NIKALLLLLLL import (
     start, set_filename, set_contact_name, set_limit, set_start,
     set_vcf_start, make_vcf_command, merge_command, done_merge,
@@ -17,20 +17,15 @@ from NIKALLLLLLL import (
     handle_document, handle_text
 )
 
-# ENV variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
 
-# Flask app
 app = Flask(__name__)
-
-# Telegram bot object
 bot = Bot(BOT_TOKEN)
 
-# PTB Application
 application = Application.builder().token(BOT_TOKEN).build()
 
-# Command handlers
+# Add handlers
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("setfilename", set_filename))
 application.add_handler(CommandHandler("setcontactname", set_contact_name))
@@ -47,19 +42,20 @@ application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_owner_input))
 application.add_handler(MessageHandler(filters.TEXT, handle_text))
 
-# Health check route
 @app.route("/")
 def health():
     return "✅ Bot is running!"
 
-# Webhook route
 @app.route(f"/{BOT_USERNAME}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
-    import asyncio
-    asyncio.run(application.process_update(update))
+    # Async processing with initialization
+    async def process():
+        await application.initialize()
+        await application.process_update(update)
+
+    asyncio.run(process())
     return "OK"
 
-# Run Flask app
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
