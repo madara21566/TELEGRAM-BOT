@@ -1,63 +1,36 @@
-import os
-import asyncio
-from flask import Flask, request
 from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    filters,
-)
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from flask import Flask
+import threading
 
-from NIKALLLLLLL import (
-    start, set_filename, set_contact_name, set_limit, set_start,
-    set_vcf_start, make_vcf_command, merge_command, done_merge,
-    export_users, owner_panel, handle_callback, handle_owner_input,
-    handle_document, handle_text
-)
+# Telegram Bot Token
+TOKEN = "7869581039:AAGWWs3d75a0PXjCwG59JFDtqkkPicuRPWQ"
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-BOT_USERNAME = os.environ.get("BOT_USERNAME")
+# Flask app for uptime monitoring
+flask_app = Flask(__name__)
 
-app = Flask(__name__)
+@flask_app.route("/")
+def health():
+    return "Bot is alive!", 200
 
-application = Application.builder().token(BOT_TOKEN).build()
+# Telegram bot handler
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Hello! Bot is working 24/7 🚀")
 
-# Add handlers
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("setfilename", set_filename))
-application.add_handler(CommandHandler("setcontactname", set_contact_name))
-application.add_handler(CommandHandler("setlimit", set_limit))
-application.add_handler(CommandHandler("setstart", set_start))
-application.add_handler(CommandHandler("setvcfstart", set_vcf_start))
-application.add_handler(CommandHandler("makevcf", make_vcf_command))
-application.add_handler(CommandHandler("merge", merge_command))
-application.add_handler(CommandHandler("done", done_merge))
-application.add_handler(CommandHandler("exportusers", export_users))
-application.add_handler(CommandHandler("panel", owner_panel))
-application.add_handler(CallbackQueryHandler(handle_callback))
-application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_owner_input))
-application.add_handler(MessageHandler(filters.TEXT, handle_text))
+# Function to run Flask in a separate thread
+def run_flask():
+    flask_app.run(host="0.0.0.0", port=8080)
 
-@app.route("/")
-def health_check():
-    return "✅ Bot is running and ready!"
-
-@app.route(f"/{BOT_USERNAME}", methods=["POST"])
-def webhook():
-    update_data = request.get_json(force=True)
-    update = Update.de_json(update_data, application.bot)
-
-    async def process_update():
-        # Initialize Application if not done
-        if not application.ready:
-            await application.initialize()
-        await application.process_update(update)
-
-    asyncio.run(process_update())
-    return "OK"
+# Function to run the bot
+def run_bot():
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.run_polling()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    # Start Flask server in another thread
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
+
+    # Start Telegram bot polling
+    run_bot()
