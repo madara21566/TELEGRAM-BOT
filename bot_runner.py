@@ -10,7 +10,7 @@ import os
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
-async def run_bot():
+async def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -29,7 +29,7 @@ async def run_bot():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_owner_input))
     app.add_handler(MessageHandler(filters.TEXT, handle_text))
 
-    await app.initialize()
-    await app.start()
-    print("✅ Telegram bot started.")
-    await app.updater.start_polling()
+    await app.run_polling()
+
+if __name__ == "__main__":
+    asyncio.run(main())
