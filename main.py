@@ -1,7 +1,7 @@
 import os
 import asyncio
 from flask import Flask, request
-from telegram import Bot, Update
+from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -21,7 +21,6 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
 
 app = Flask(__name__)
-bot = Bot(BOT_TOKEN)
 
 application = Application.builder().token(BOT_TOKEN).build()
 
@@ -48,10 +47,13 @@ def health_check():
 
 @app.route(f"/{BOT_USERNAME}", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
+    update_data = request.get_json(force=True)
+    update = Update.de_json(update_data, application.bot)
 
     async def process_update():
-        await application.initialize()
+        # Initialize Application if not done
+        if not application.ready:
+            await application.initialize()
         await application.process_update(update)
 
     asyncio.run(process_update())
