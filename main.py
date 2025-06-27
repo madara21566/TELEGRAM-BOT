@@ -53,7 +53,8 @@ def webhook():
     async def process():
         await application.process_update(update)
 
-    application.create_task(process())
+import asyncio
+asyncio.run(application.process_update(update))
     return "OK"
 
 if __name__ == "__main__":
