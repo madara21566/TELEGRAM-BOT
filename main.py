@@ -1,4 +1,7 @@
 import os
+import asyncio
+from flask import Flask, request
+from telegram import Bot, Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -6,7 +9,6 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
 )
-from aiohttp import web
 
 from NIKALLLLLLL import (
     start, set_filename, set_contact_name, set_limit, set_start,
@@ -17,9 +19,10 @@ from NIKALLLLLLL import (
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
-WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{BOT_USERNAME}"
 
-# Create Application
+app = Flask(__name__)
+bot = Bot(BOT_TOKEN)
+
 application = Application.builder().token(BOT_TOKEN).build()
 
 # Add handlers
@@ -39,16 +42,20 @@ application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_owner_input))
 application.add_handler(MessageHandler(filters.TEXT, handle_text))
 
-# Add root route for UptimeRobot health check
-async def health(request):
-    return web.Response(text="✅ Bot is running!", content_type="text/plain")
+@app.route("/")
+def health_check():
+    return "✅ Bot is running and ready!"
 
-application.web_app.router.add_get("/", health)
+@app.route(f"/{BOT_USERNAME}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+
+    async def process_update():
+        await application.initialize()
+        await application.process_update(update)
+
+    asyncio.run(process_update())
+    return "OK"
 
 if __name__ == "__main__":
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=5000,
-        url_path=BOT_USERNAME,
-        webhook_url=WEBHOOK_URL
-    )
+    app.run(host="0.0.0.0", port=5000)
