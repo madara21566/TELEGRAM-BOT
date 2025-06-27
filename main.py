@@ -17,7 +17,7 @@ from NIKALLLLLLL import (
     handle_document, handle_text
 )
 
-BOT_TOKEN =  os.environ.get ("BOT_TOKEN")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
 
 # Flask App
@@ -50,7 +50,11 @@ def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
 
     async def process_update():
-        await telegram_app.initialize()  # ✅ REQUIRED ONCE
+        # ✅ INITIALIZE BOT ONCE
+        await bot.initialize()
+        # ✅ INITIALIZE APPLICATION
+        await telegram_app.initialize()
+        # ✅ Process the update
         await telegram_app.process_update(update)
 
     asyncio.run(process_update())
