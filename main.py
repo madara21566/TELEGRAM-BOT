@@ -23,7 +23,7 @@ app = Flask(__name__)
 def index():
     return "✅ Bot is running!"
 
-# Telegram bot
+# Telegram bot setup
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 telegram_app = Application.builder().token(BOT_TOKEN).build()
 
@@ -47,11 +47,11 @@ telegram_app.add_handler(MessageHandler(filters.TEXT, handle_text))
 def start_polling():
     telegram_app.run_polling()
 
-@app.before_first_request
-def activate_bot():
-    thread = threading.Thread(target=start_polling, daemon=True)
-    thread.start()
-
 if __name__ == "__main__":
+    # Start Telegram polling in background
+    polling_thread = threading.Thread(target=start_polling, daemon=True)
+    polling_thread.start()
+
+    # Start Flask server
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
