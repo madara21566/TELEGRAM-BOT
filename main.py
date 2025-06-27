@@ -1,5 +1,4 @@
 import os
-import asyncio
 from flask import Flask, request
 from telegram import Update, Bot
 from telegram.ext import (
@@ -10,6 +9,7 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
+from telegram.request import HTTPXRequest
 from NIKALLLLLLL import (
     start, set_filename, set_contact_name, set_limit, set_start,
     set_vcf_start, make_vcf_command, merge_command, done_merge,
@@ -23,9 +23,12 @@ BOT_USERNAME = os.environ.get("BOT_USERNAME")
 # Flask App
 app = Flask(__name__)
 
-# Telegram Bot Application (PTB v20+)
-telegram_app = Application.builder().token(BOT_TOKEN).build()
-bot = Bot(BOT_TOKEN)
+# Increase connection pool
+request_config = HTTPXRequest(connection_pool_size=20)
+
+# Telegram Application and Bot
+telegram_app = Application.builder().token(BOT_TOKEN).request(request_config).build()
+bot = Bot(BOT_TOKEN, request=request_config)
 
 # Handlers
 telegram_app.add_handler(CommandHandler("start", start))
@@ -44,27 +47,19 @@ telegram_app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_owner_input))
 telegram_app.add_handler(MessageHandler(filters.TEXT, handle_text))
 
-# Route for webhook
+# Webhook Route
 @app.route(f"/{BOT_USERNAME}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
 
-    async def process_update():
-        # ✅ INITIALIZE BOT ONCE
-        await bot.initialize()
-        # ✅ INITIALIZE APPLICATION
-        await telegram_app.initialize()
-        # ✅ Process the update
-        await telegram_app.process_update(update)
-
-    asyncio.run(process_update())
-    return "OK"
+    # Instead of asyncio.run, use application directly
+    return telegram_app.update_queue.put(update) or "OK"
 
 # Health check
 @app.route("/")
 def home():
-    return "✅ Bot is running on Render with Webhook!"
+    return "✅ Bot is running with increased connection pool!"
 
-# Entry point for local testing (optional)
+# Entry point for local testing
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
