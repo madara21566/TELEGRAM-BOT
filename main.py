@@ -1,11 +1,14 @@
 import os
+import asyncio
+from flask import Flask, request
+from telegram import Update, Bot
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
     ContextTypes,
-    filters,
+    filters
 )
 from NIKALLLLLLL import (
     start, set_filename, set_contact_name, set_limit, set_start,
@@ -14,35 +17,50 @@ from NIKALLLLLLL import (
     handle_document, handle_text
 )
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
+BOT_TOKEN =  os.environ.get ("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
-WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{BOT_USERNAME}"
 
-# Create Application
-application = Application.builder().token(BOT_TOKEN).build()
+# Flask App
+app = Flask(__name__)
+
+# Telegram Bot Application (PTB v20+)
+telegram_app = Application.builder().token(BOT_TOKEN).build()
+bot = Bot(BOT_TOKEN)
 
 # Handlers
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("setfilename", set_filename))
-application.add_handler(CommandHandler("setcontactname", set_contact_name))
-application.add_handler(CommandHandler("setlimit", set_limit))
-application.add_handler(CommandHandler("setstart", set_start))
-application.add_handler(CommandHandler("setvcfstart", set_vcf_start))
-application.add_handler(CommandHandler("makevcf", make_vcf_command))
-application.add_handler(CommandHandler("merge", merge_command))
-application.add_handler(CommandHandler("done", done_merge))
-application.add_handler(CommandHandler("exportusers", export_users))
-application.add_handler(CommandHandler("panel", owner_panel))
-application.add_handler(CallbackQueryHandler(handle_callback))
-application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_owner_input))
-application.add_handler(MessageHandler(filters.TEXT, handle_text))
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(CommandHandler("setfilename", set_filename))
+telegram_app.add_handler(CommandHandler("setcontactname", set_contact_name))
+telegram_app.add_handler(CommandHandler("setlimit", set_limit))
+telegram_app.add_handler(CommandHandler("setstart", set_start))
+telegram_app.add_handler(CommandHandler("setvcfstart", set_vcf_start))
+telegram_app.add_handler(CommandHandler("makevcf", make_vcf_command))
+telegram_app.add_handler(CommandHandler("merge", merge_command))
+telegram_app.add_handler(CommandHandler("done", done_merge))
+telegram_app.add_handler(CommandHandler("exportusers", export_users))
+telegram_app.add_handler(CommandHandler("panel", owner_panel))
+telegram_app.add_handler(CallbackQueryHandler(handle_callback))
+telegram_app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_owner_input))
+telegram_app.add_handler(MessageHandler(filters.TEXT, handle_text))
 
+# Route for webhook
+@app.route(f"/{BOT_USERNAME}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+
+    async def process_update():
+        await telegram_app.initialize()  # âœ… REQUIRED ONCE
+        await telegram_app.process_update(update)
+
+    asyncio.run(process_update())
+    return "OK"
+
+# Health check
+@app.route("/")
+def home():
+    return "âœ… Bot is running on Render with Webhook!"
+
+# Entry point for local testing (optional)
 if __name__ == "__main__":
-    # Start webhook directly (No Flask needed)
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=5000,
-        url_path=BOT_USERNAME,
-        webhook_url=WEBHOOK_URL
-)
+    app.run(host="0.0.0.0", port=5000)
