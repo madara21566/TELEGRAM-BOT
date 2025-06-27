@@ -1,6 +1,6 @@
 import os
+import threading
 from flask import Flask
-from threading import Thread
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -23,9 +23,8 @@ app = Flask(__name__)
 def index():
     return "✅ Bot is running!"
 
-# Telegram bot setup
+# Telegram bot
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-
 telegram_app = Application.builder().token(BOT_TOKEN).build()
 
 # Handlers
@@ -45,13 +44,14 @@ telegram_app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_owner_input))
 telegram_app.add_handler(MessageHandler(filters.TEXT, handle_text))
 
-def run_flask():
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
-
-def run_telegram():
+def start_polling():
     telegram_app.run_polling()
 
+@app.before_first_request
+def activate_bot():
+    thread = threading.Thread(target=start_polling, daemon=True)
+    thread.start()
+
 if __name__ == "__main__":
-    Thread(target=run_flask).start()
-    Thread(target=run_telegram).start()
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
