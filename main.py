@@ -40,9 +40,22 @@ application.add_handler(MessageHandler(filters.TEXT, handle_text))
 
 if __name__ == "__main__":
     # Start webhook directly (No Flask needed)
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=5000,
-        url_path=BOT_USERNAME,
-        webhook_url=WEBHOOK_URL
-    )
+    application = (
+    Application.builder()
+    .token(BOT_TOKEN)
+    .build()
+)
+
+# Add a health check route to root "/"
+async def health_check(request):
+    return web.Response(text="✅ Bot is running", content_type="text/plain")
+
+application.web_app.router.add_get("/", health_check)
+
+# Then start webhook
+application.run_webhook(
+    listen="0.0.0.0",
+    port=5000,
+    url_path=BOT_USERNAME,
+    webhook_url=WEBHOOK_URL
+)
