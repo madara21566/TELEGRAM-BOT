@@ -57,9 +57,4 @@ def webhook():
     return "OK"
 
 if __name__ == "__main__":
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=5000,
-        url_path=BOT_USERNAME,
-        webhook_url=WEBHOOK_URL
-    )
+    app.run(host="0.0.0.0", port=5000)
