@@ -1,7 +1,6 @@
 pandas
 Flask
 gunicorn
-uvicorn
 python-telegram-bot==20.3
 aiohttp
 python-telegram-bot[webhooks]
