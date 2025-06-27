@@ -28,9 +28,6 @@ def run_bot():
     app.run_polling()
 
 if __name__ == "__main__":
-    # Start Flask server in another thread
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
-
-    # Start Telegram bot polling
     run_bot()
