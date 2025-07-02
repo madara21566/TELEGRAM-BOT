@@ -32,11 +32,11 @@ application.add_handler(CommandHandler("done", done_merge))
 application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 application.add_handler(MessageHandler(filters.TEXT, handle_text))
 
-if __name__ == "__main__":
-    # Start webhook directly (No Flask needed)
+    if __name__ == "__main__":
+    PORT = int(os.environ.get("PORT", 10000))
     application.run_webhook(
         listen="0.0.0.0",
-        port=5000,
+        port=PORT,
         url_path=BOT_USERNAME,
         webhook_url=WEBHOOK_URL
     )
