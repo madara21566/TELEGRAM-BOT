@@ -4,7 +4,7 @@ import csv
 import time
 import pandas as pd
 from datetime import datetime
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -15,10 +15,14 @@ from telegram.ext import (
 from io import StringIO
 
 # ✅ CONFIGURATION
-BOT_TOKEN =  os.environ.get ("BOT_TOKEN")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
 OWNER_ID = 7640327597  # Your Telegram ID
-ALLOWED_USERS = [2134530726,7440046924,6105744293,8128934569,7950732287,7669357884,8047407478,7193035541,7118726445,5849097477,7938117492,6190086618,7640327597]  # ✅ Add more IDs here if needed
+ALLOWED_USERS = [
+    2134530726,7440046924,6105744293,8128934569,7950732287,
+    7669357884,8047407478,7193035541,7118726445,5849097477,
+    7938117492,6190086618,7640327597
+]
 
 # ✅ SIMPLE ACCESS CHECK
 def is_authorized(user_id):
@@ -26,6 +30,9 @@ def is_authorized(user_id):
 
 def has_access_level(user_id, required_level):
     return user_id in ALLOWED_USERS
+
+# ✅ BOT START TIME
+BOT_START_TIME = datetime.utcnow()
 
 # DEFAULTS
 default_vcf_name = "Contacts"
@@ -81,19 +88,35 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
         await update.message.reply_text("Unauthorized. Contact the bot owner.")
         return
-    await update.message.reply_text(
-        "Welcome to the VCF Bot!\n\n"
+
+    now = datetime.utcnow()
+    uptime_duration = now - BOT_START_TIME
+    hours, remainder = divmod(uptime_duration.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    uptime_text = f"🤖 Uptime: {hours}h {minutes}m {seconds}s"
+
+    help_text = (
+        "👋 Welcome to the VCF Bot!\n\n"
+        f"{uptime_text}\n\n"
         "Available Commands:\n"
         "/setfilename <name> - Set VCF filename prefix\n"
         "/setcontactname <name> - Set contact name prefix\n"
         "/setlimit <number> - Limit contacts per VCF\n"
-        "/setstart <number> - Start index for contact numbering\n"
-        "/setvcfstart <number> - VCF file numbering start\n"
+        "/setstart <number> - Start index for numbering\n"
+        "/setvcfstart <number> - VCF numbering start\n"
         "/makevcf Name 9876543210 - Create single VCF\n"
         "/merge output_name - Start merging VCF/TXT files\n"
         "/done - Complete merge operation\n\n"
-        "Send a TXT, CSV, XLSX, or VCF file or plain numbers to generate contacts."
+        "Send TXT, CSV, XLSX, or VCF files or plain numbers to generate contacts."
     )
+
+    keyboard = [
+        [InlineKeyboardButton("Help 📖", url="https://t.me/your_help_link")],
+        [InlineKeyboardButton("About ℹ️", url="https://t.me/your_about_link")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(help_text, reply_markup=reply_markup)
 
 async def set_filename(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not has_access_level(update.effective_user.id, 1): return
