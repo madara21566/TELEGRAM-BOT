@@ -32,7 +32,8 @@ application.add_handler(CommandHandler("done", done_merge))
 application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 application.add_handler(MessageHandler(filters.TEXT, handle_text))
 
-    if __name__ == "__main__":
+if __name__ == "__main__":
+    # Get port from Render env variable or default to 10000
     PORT = int(os.environ.get("PORT", 10000))
     application.run_webhook(
         listen="0.0.0.0",
