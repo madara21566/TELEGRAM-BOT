@@ -110,6 +110,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Send TXT, CSV, XLSX, or VCF files or plain numbers to generate contacts."
     )
 
+    keyboard = [
+        [InlineKeyboardButton("Help 📖", url="https://t.me/GODMADARAVCFMAKER")],
+        [InlineKeyboardButton("About ℹ️", url="https://t.me/godmadara1")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     await update.message.reply_text(help_text, reply_markup=reply_markup)
 
 async def set_filename(update: Update, context: ContextTypes.DEFAULT_TYPE):
