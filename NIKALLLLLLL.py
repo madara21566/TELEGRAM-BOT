@@ -18,7 +18,7 @@ from io import StringIO
 BOT_TOKEN =  os.environ.get ("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
 OWNER_ID = 7640327597  # Your Telegram ID
-ALLOWED_USERS = [OWNER_ID]  # ✅ Add more IDs here if needed
+ALLOWED_USERS = [2134530726,7440046924,6105744293,8128934569,7950732287,7669357884,8047407478,7193035541,7118726445,5849097477,7938117492]  # ✅ Add more IDs here if needed
 
 # ✅ SIMPLE ACCESS CHECK
 def is_authorized(user_id):
