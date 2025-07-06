@@ -1,7 +1,5 @@
 import os
 import re
-import csv
-import time
 import pandas as pd
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -12,17 +10,18 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
-from io import StringIO
 
 # ✅ CONFIGURATION
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
 OWNER_ID = 7640327597  # Your Telegram ID
-ALLOWED_USERS = [2134530726,7440046924,6105744293,8128934569,7950732287,
+ALLOWED_USERS = [
+    2134530726,7440046924,6105744293,8128934569,7950732287,
     7669357884,8047407478,7193035541,7118726445,5849097477,
-    7938117492,6190086618,7640327597,7983528757]
+    7938117492,6190086618,7640327597,7983528757
+]
 
-# ✅ SIMPLE ACCESS CHECK
+# ✅ ACCESS CONTROL
 def is_authorized(user_id):
     return user_id in ALLOWED_USERS
 
@@ -32,23 +31,22 @@ def has_access_level(user_id, required_level):
 # ✅ BOT START TIME
 BOT_START_TIME = datetime.utcnow()
 
-# DEFAULTS
+# DEFAULT SETTINGS
 default_vcf_name = "Contacts"
 default_contact_name = "Contact"
 default_limit = 100
 default_start_index = 1
 default_vcf_start_number = 1
 
-# User settings
+# USER SETTINGS
 user_file_names = {}
 user_contact_names = {}
 user_limits = {}
 user_start_indexes = {}
 user_vcf_start_numbers = {}
-
 merge_data = {}
 
-# VCF Generation
+# VCF GENERATION
 def generate_vcf(numbers, filename="Contacts", contact_name="Contact", start_index=1):
     vcf_data = ""
     for i, num in enumerate(numbers, start=start_index):
@@ -58,7 +56,6 @@ def generate_vcf(numbers, filename="Contacts", contact_name="Contact", start_ind
         f.write(vcf_data)
     return f"{filename}.vcf"
 
-# Extract Numbers
 def extract_numbers_from_vcf(file_path):
     numbers = set()
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -81,15 +78,13 @@ def extract_numbers_from_txt(file_path):
     return numbers
 
 # COMMANDS
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
         await update.message.reply_text("Unauthorized. Contact the bot owner.")
         return
 
-    now = datetime.utcnow()
-    uptime_duration = now - BOT_START_TIME
-    hours, remainder = divmod(uptime_duration.seconds, 3600)
+    uptime = datetime.utcnow() - BOT_START_TIME
+    hours, remainder = divmod(uptime.seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     uptime_text = f"🤖 Uptime: {hours}h {minutes}m {seconds}s"
 
@@ -112,9 +107,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Help 📖", url="https://t.me/GODMADARAVCFMAKER")],
         [InlineKeyboardButton("About ℹ️", url="https://t.me/godmadara1")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await update.message.reply_text(help_text, reply_markup=reply_markup)
+    await update.message.reply_text(help_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def set_filename(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not has_access_level(update.effective_user.id, 1): return
@@ -205,6 +198,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     path = f"{file.file_unique_id}_{file.file_name}"
     await (await context.bot.get_file(file.file_id)).download_to_drive(path)
     file_ext = path.split('.')[-1].lower()
+
     if update.effective_user.id in merge_data:
         if file_ext == 'vcf':
             numbers = extract_numbers_from_vcf(path)
@@ -218,6 +212,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove(path)
         await update.message.reply_text(f"Added {len(numbers)} numbers. Send /done to finish.")
         return
+
     try:
         if path.endswith('.csv'):
             df = pd.read_csv(path)
@@ -225,7 +220,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             df = pd.read_excel(path)
         elif path.endswith('.txt'):
             with open(path) as f:
-                numbers = [''.join(filter(str.isdigit, w)) for w in f.read().split() if len(w)>=7]
+                numbers = [''.join(filter(str.isdigit, w)) for w in f.read().split() if len(w) >= 7]
             df = pd.DataFrame({'Numbers': numbers})
         elif path.endswith('.vcf'):
             numbers = extract_numbers_from_vcf(path)
@@ -235,11 +230,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         await process_numbers(update, context, df['Numbers'].dropna().astype(str).tolist())
     finally:
-        if os.path.exists(path): os.remove(path)
+        if os.path.exists(path):
+            os.remove(path)
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id): return
-    numbers = [''.join(filter(str.isdigit, w)) for w in update.message.text.split() if len(w)>=7]
+    numbers = [''.join(filter(str.isdigit, w)) for w in update.message.text.split() if len(w) >= 7]
     if numbers:
         await process_numbers(update, context, numbers)
     else:
@@ -253,11 +249,16 @@ async def process_numbers(update, context, numbers):
     start_index = user_start_indexes.get(user_id, default_start_index)
     vcf_num = user_vcf_start_numbers.get(user_id, default_vcf_start_number)
     numbers = list(dict.fromkeys([n.strip() for n in numbers if n.strip().isdigit()]))
-    chunks = [numbers[i:i+limit] for i in range(0, len(numbers), limit)]
+    chunks = [numbers[i:i + limit] for i in range(0, len(numbers), limit)]
     for idx, chunk in enumerate(chunks):
-        file_path = generate_vcf(chunk, f"{file_base}_{vcf_num+idx}", contact_name, start_index+idx*limit)
+        file_path = generate_vcf(chunk, f"{file_base}_{vcf_num + idx}", contact_name, start_index + idx * limit)
         await update.message.reply_document(document=open(file_path, "rb"))
         os.remove(file_path)
+
+# ✅ Error Handler
+async def error_handler(update, context):
+    print("An exception occurred:")
+    print(context.error)
 
 if __name__ == '__main__':
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -272,4 +273,5 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('done', done_merge))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_error_handler(error_handler)
     app.run_polling()
