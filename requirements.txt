@@ -1,7 +1,7 @@
 pandas
 Flask
 gunicorn
-python-telegram-bot v20+
+python-telegram-bot==20.3
 aiohttp
 python-telegram-bot[webhooks]
 honcho
