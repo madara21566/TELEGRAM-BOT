@@ -18,7 +18,7 @@ OWNER_ID = 7640327597  # Your Telegram ID
 ALLOWED_USERS = [
     2134530726,7440046924,6105744293,8128934569,7950732287,
     7669357884,8047407478,7193035541,7118726445,5849097477,
-    7938117492,6190086618,7640327597
+    7938117492,6190086618,7640327597,7983528757
 ]
 
 # ✅ ACCESS CHECK
@@ -92,14 +92,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👋 Welcome to the VCF Bot!\n\n"
         f"🤖 Uptime: {hours}h {minutes}m {seconds}s\n\n"
         "Available Commands:\n"
-        "/setfilename <name>\n"
-        "/setcontactname <name>\n"
-        "/setlimit <number>\n"
-        "/setstart <number>\n"
-        "/setvcfstart <number>\n"
-        "/makevcf Name 9876543210\n"
-        "/merge output_name\n"
-        "/done\n\n"
+        "/setfilename [FILE NAME]\n"
+        "/setcontactname [CONTACT NAME]\n"
+        "/setlimit [PER VCF CONTACT]\n"
+        "/setstart [CONTACT NUMBERING START]\n"
+        "/setvcfstart [VCF NUMBERING START]\n"
+        "/makevcf [NAME 9876543210]\n"
+        "/merge [VCF NAME SET]\n"
+        "/done[AFTER FILE SET]\n"
         "Send TXT, CSV, XLSX, or VCF files or numbers."
     )
 
