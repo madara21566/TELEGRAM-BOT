@@ -100,8 +100,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/makevcf [NAME 9876543210]😁\n"
         "/merge [VCF NAME SET]☺️\n"
         "/done[AFTER FILE SET]🥰\n"
-        "Send TXT, CSV, XLSX, or VCF files or numbers.
-        If you are not able to use the bot then click on the help button, full details are there🤫."
+        "Send TXT, CSV, XLSX, or VCF files or numbers."
+        "If you are not able to use the bot then click on the help button, full details are there🤫."
     )
 
     keyboard = [
