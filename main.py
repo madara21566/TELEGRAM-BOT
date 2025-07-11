@@ -14,21 +14,23 @@ from NIKALLLLLLL import (
     handle_document, handle_text
 )
 
+# Environment Variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
 WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{BOT_USERNAME}"
 
-# Create Flask app for website root
+# ✅ 1. Create Flask App
 app = Flask(__name__)
 
 @app.route('/')
 def index():
     return '✅ Telegram Bot is Running on Render!'
 
+# Run Flask in a separate thread
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
 
-# Create Application
+# ✅ 2. Create Telegram App
 application = Application.builder().token(BOT_TOKEN).build()
 
 # Handlers
@@ -44,11 +46,12 @@ application.add_handler(CommandHandler("done", done_merge))
 application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 application.add_handler(MessageHandler(filters.TEXT, handle_text))
 
+# ✅ 3. Main function to start Flask + Webhook
 if __name__ == "__main__":
-    # Start Flask server in a thread
+    # Start Flask server thread
     threading.Thread(target=run_flask).start()
 
-    # Get port from Render env variable or default to 10000
+    # Start Telegram Webhook
     PORT = int(os.environ.get("PORT", 10000))
     application.run_webhook(
         listen="0.0.0.0",
