@@ -1,120 +1,52 @@
 import os
 import re
 import threading
-import time
 from datetime import datetime
-from flask import Flask, request, redirect, url_for, render_template_string, send_file
-from telegram.ext import (
-    Application, CommandHandler, MessageHandler, ContextTypes, filters
-)
+from flask import Flask, request, render_template_string
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 # === Configuration ===
-OWNER_ID = 7640327597  # Replace with your Telegram ID
+OWNER_ID = 7640327597
 ALLOWED_USERS = [7440046924,7669357884,7640327597,5849097477,2134530726,8128934569,7950732287,5989680310]
 BOT_START_TIME = datetime.utcnow()
 
-# === Globals ===
+# === Tracking ===
 logs = []
-user_file_names = {}
-user_contact_names = {}
-user_limits = {}
-user_start_indexes = {}
-user_vcf_start_numbers = {}
-default_vcf_name = "Contacts"
-default_contact_name = "Contact"
-default_limit = 100
-default_start_index = 1
-default_vcf_start_number = 1
-merge_data = {}
-
-# === VCF Utilities ===
-def generate_vcf(numbers, filename, contact_name, start_index):
-    vcf_data = ""
-    for i, num in enumerate(numbers, start=start_index):
-        name = f"{contact_name}{str(i).zfill(3)}"
-        vcf_data += f"BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nTEL;TYPE=CELL:{num}\nEND:VCARD\n"
-    with open(filename, "w") as f:
-        f.write(vcf_data)
-    return filename
-
-def extract_numbers_from_txt(path):
-    numbers = set()
-    with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-        for line in f:
-            nums = re.findall(r'\d{7,}', line)
-            numbers.update(nums)
-    return list(numbers)
+active_users = set()
 
 # === Telegram Bot Setup ===
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 app = Application.builder().token(BOT_TOKEN).build()
 
-# === Telegram Commands ===
 async def start(update, context):
     uid = update.effective_user.id
+    uname = update.effective_user.username or "Unknown"
     if uid not in ALLOWED_USERS:
         await update.message.reply_text("Unauthorized. Contact the bot owner.")
         return
 
+    active_users.add((uid, uname))
     uptime = datetime.utcnow() - BOT_START_TIME
-    logs.append(f"[START] {uid} - {update.effective_user.username}")
+    logs.append(f"[START] {uname} ({uid})")
     await update.message.reply_text(f"🤖 Bot is running!\nUptime: {uptime.seconds//60} mins")
 
-async def makevcf(update, context):
-    uid = update.effective_user.id
-    if uid not in ALLOWED_USERS: return
-    if len(context.args) != 2: return await update.message.reply_text("Use: /makevcf Name 9876543210")
-    name, number = context.args
-    if not number.isdigit(): return await update.message.reply_text("Invalid number.")
-    filename = f"{name}.vcf"
-    with open(filename, "w") as f:
-        f.write(f"BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nTEL;TYPE=CELL:{number}\nEND:VCARD\n")
-    await update.message.reply_document(document=open(filename, "rb"))
-    os.remove(filename)
-
 app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("makevcf", makevcf))
 
-# === Flask Web Interface ===
+# === Flask App ===
 flask_app = Flask(__name__)
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 @flask_app.route('/')
-def home():
-    return render_template_string("""
-    <h2>✅ Telegram VCF Bot is Running!</h2>
-    <a href='/upload'>📤 Upload & Convert</a> |
-    <a href='/stats'>📊 Stats</a> |
-    <a href='/panel?owner_id={{ owner_id }}'>⚙️ Admin</a>
-    """, owner_id=OWNER_ID)
-
-@flask_app.route('/upload', methods=['GET', 'POST'])
-def upload():
-    if request.method == 'POST':
-        file = request.files['file']
-        contact_prefix = request.form.get('prefix', 'Contact')
-        start_index = int(request.form.get('start', '1'))
-        if file and file.filename.endswith(('.txt', '.vcf')):
-            path = os.path.join(UPLOAD_FOLDER, file.filename)
-            file.save(path)
-            numbers = extract_numbers_from_txt(path)
-            vcf_file = generate_vcf(numbers, path + '.vcf', contact_prefix, start_index)
-            return send_file(vcf_file, as_attachment=True)
-    return '''
-    <h3>📤 Upload TXT/VCF to Convert</h3>
-    <form method="post" enctype="multipart/form-data">
-        <input type="file" name="file" required><br><br>
-        Contact Name Prefix: <input name="prefix" value="Contact"><br>
-        Start Index: <input name="start" value="1"><br><br>
-        <input type="submit" value="Convert to VCF">
-    </form>
-    '''
-
-@flask_app.route('/stats')
-def stats():
+def dashboard():
     uptime = datetime.utcnow() - BOT_START_TIME
-    return f"<h3>📊 Bot Stats</h3>Total Users: {len(ALLOWED_USERS)}<br>Uptime: {uptime.seconds//60} mins"
+    minutes = uptime.seconds // 60
+    recent_users = "<br>".join([f"@{u[1]} (ID: {u[0]})" for u in list(active_users)[-10:]])
+    return render_template_string("""
+        <h2>📊 VCF Bot Dashboard</h2>
+        <p><b>✅ Status:</b> Bot is Running</p>
+        <p><b>⏰ Uptime:</b> {{ minutes }} minutes</p>
+        <p><b>👥 Authorized Users:</b> {{ total_users }}</p>
+        <p><b>🟢 Recent Active Users:</b><br>{{ users }}</p>
+    """, minutes=minutes, total_users=len(ALLOWED_USERS), users=recent_users or "None")
 
 @flask_app.route('/logs')
 def show_logs():
@@ -128,19 +60,8 @@ def panel():
     if str(owner_id) != str(OWNER_ID): return "Unauthorized"
     return render_template_string("""
         <h2>⚙️ Admin Panel</h2>
-        <a href='/logs?owner_id={{ owner_id }}'>📜 View Logs</a><br>
-        <form method='post' action='/cleanup?owner_id={{ owner_id }}'>
-            <button type='submit'>🧹 Cleanup Uploaded Files</button>
-        </form>
+        <a href='/logs?owner_id={{ owner_id }}'>📜 View Logs</a>
     """, owner_id=OWNER_ID)
-
-@flask_app.route('/cleanup', methods=['POST'])
-def cleanup():
-    owner_id = request.args.get('owner_id')
-    if str(owner_id) != str(OWNER_ID): return "Unauthorized"
-    for f in os.listdir(UPLOAD_FOLDER):
-        os.remove(os.path.join(UPLOAD_FOLDER, f))
-    return "✅ Cleanup done."
 
 # === Run Flask + Bot Together ===
 def run_flask():
