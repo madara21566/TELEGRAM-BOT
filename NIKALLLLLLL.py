@@ -103,7 +103,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [InlineKeyboardButton("Help 📖", url="https://t.me/GODMADARAVCFMAKER")],
-        [InlineKeyboardButton("About ℹ️", url="https://t.me/godmadara1")]
+        [InlineKeyboardButton("About ℹ️", url="https://telegram-bot-z3zl.onrender.com/")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
