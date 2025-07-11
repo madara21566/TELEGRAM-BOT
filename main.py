@@ -73,9 +73,9 @@ def home():
     <h3>📋 Full User History</h3>
     <table border="1" cellpadding="5">
         <tr><th>No.</th><th>Username</th><th>User ID</th><th>Action</th><th>Time</th></tr>
-        {% for i, row in enumerate(logs, 1) %}
+        {% for row in logs %}
         <tr>
-            <td>{{ i }}</td><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td><td>{{ row[3] }}</td>
+            <td>{{ loop.index }}</td><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td><td>{{ row[3] }}</td>
         </tr>
         {% endfor %}
     </table>
