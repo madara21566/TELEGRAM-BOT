@@ -25,10 +25,22 @@ async def start(update, context):
         await update.message.reply_text("Unauthorized. Contact the bot owner.")
         return
 
+    now = datetime.utcnow()
+    uptime = now - BOT_START_TIME
+    hours, remainder = divmod(uptime.seconds, 3600)
+    minutes = remainder // 60
+
     active_users.add((uid, uname))
-    uptime = datetime.utcnow() - BOT_START_TIME
-    logs.append(f"[START] {uname} ({uid})")
-    await update.message.reply_text(f"🤖 Bot is running!\nUptime: {uptime.seconds//60} mins")
+    logs.append(f"[START] {uname} ({uid}) at {now.strftime('%H:%M:%S')} UTC")
+
+    await update.message.reply_text(
+        f"""
+🤖 Bot is running!
+⏱️ Uptime: {hours}h {minutes}m
+👤 User: @{uname} (ID: {uid})
+🕒 Server Time: {now.strftime('%Y-%m-%d %H:%M:%S')} UTC
+        """
+    )
 
 app.add_handler(CommandHandler("start", start))
 
@@ -39,14 +51,18 @@ flask_app = Flask(__name__)
 def dashboard():
     uptime = datetime.utcnow() - BOT_START_TIME
     minutes = uptime.seconds // 60
-    recent_users = "<br>".join([f"@{u[1]} (ID: {u[0]})" for u in list(active_users)[-10:]])
+    hours = minutes // 60
+    minutes = minutes % 60
+    recent_users = "<br>".join([f"<span style='color:green'>🟢 @{u[1]} (ID: {u[0]})</span>" for u in list(active_users)[-10:]])
     return render_template_string("""
-        <h2>📊 VCF Bot Dashboard</h2>
+        <html><head><title>VCF Bot Dashboard</title></head><body style="font-family: Arial; padding:20px">
+        <h2>📊 <b>VCF Bot Dashboard</b></h2>
         <p><b>✅ Status:</b> Bot is Running</p>
-        <p><b>⏰ Uptime:</b> {{ minutes }} minutes</p>
+        <p><b>⏰ Uptime:</b> {{ hours }}h {{ minutes }}m</p>
         <p><b>👥 Authorized Users:</b> {{ total_users }}</p>
-        <p><b>🟢 Recent Active Users:</b><br>{{ users }}</p>
-    """, minutes=minutes, total_users=len(ALLOWED_USERS), users=recent_users or "None")
+        <p><b>🧑‍💻 Recent Active Users:</b><br>{{ users|safe }}</p>
+        </body></html>
+    """, hours=hours, minutes=minutes, total_users=len(ALLOWED_USERS), users=recent_users or "<i>No activity yet</i>")
 
 @flask_app.route('/logs')
 def show_logs():
