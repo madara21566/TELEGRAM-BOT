@@ -14,6 +14,29 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
 SECRET_KEY = os.environ.get("FLASK_SECRET", "secretkey123")
 
+# ✅ MANUAL ACCESS CONTROL
+ALLOWED_USERS = [7440440924, 7669357884, 7640327597, 5849079477, 2114352076, 8128934569, 7950732287, 5998603010, 7983528757]
+
+def is_authorized(user_id):
+    return user_id in ALLOWED_USERS or is_authorized_in_db(user_id)
+
+def is_authorized_in_db(user_id):
+    now = datetime.datetime.now()
+    with sqlite3.connect(DB_FILE) as conn:
+        c = conn.cursor()
+        c.execute("DELETE FROM access WHERE type='temporary' AND expires_at IS NOT NULL AND datetime(expires_at) < ?", (now,))
+        c.execute("SELECT * FROM access WHERE user_id=?", (user_id,))
+        row = c.fetchone()
+        return bool(row)
+
+def parse_duration(duration_str):
+    n = int(duration_str[:-1])
+    unit = duration_str[-1]
+    if unit == "m": return datetime.datetime.now() + datetime.timedelta(minutes=n)
+    if unit == "h": return datetime.datetime.now() + datetime.timedelta(hours=n)
+    if unit == "d": return datetime.datetime.now() + datetime.timedelta(days=n)
+    return None
+
 # ========== DB Setup ==========
 DB_FILE = "bot_stats.db"
 def init_db():
@@ -40,23 +63,6 @@ def log_action(user_id, username, action):
         c.execute("INSERT INTO logs (user_id, username, action, timestamp) VALUES (?, ?, ?, ?)",
                   (user_id, username or 'N/A', action, now))
         conn.commit()
-
-def is_authorized(user_id):
-    now = datetime.datetime.now()
-    with sqlite3.connect(DB_FILE) as conn:
-        c = conn.cursor()
-        c.execute("DELETE FROM access WHERE type='temporary' AND expires_at IS NOT NULL AND datetime(expires_at) < ?", (now,))
-        c.execute("SELECT * FROM access WHERE user_id=?", (user_id,))
-        row = c.fetchone()
-        return bool(row)
-
-def parse_duration(duration_str):
-    n = int(duration_str[:-1])
-    unit = duration_str[-1]
-    if unit == "m": return datetime.datetime.now() + datetime.timedelta(minutes=n)
-    if unit == "h": return datetime.datetime.now() + datetime.timedelta(hours=n)
-    if unit == "d": return datetime.datetime.now() + datetime.timedelta(days=n)
-    return None
 
 # ========== Flask App ==========
 start_time = datetime.datetime.now()
@@ -131,7 +137,6 @@ def log_feed():
         c.execute("SELECT username, user_id, action, timestamp FROM logs ORDER BY timestamp DESC LIMIT 50")
         return jsonify(c.fetchall())
 
-# ========== Access Panel ==========
 @flask_app.route('/admin/access', methods=['GET', 'POST'])
 def access_panel():
     if not session.get('admin'): return redirect('/admin')
@@ -212,6 +217,7 @@ application.add_handler(CommandHandler("done", protected(done_merge, "done")))
 application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 application.add_handler(MessageHandler(filters.TEXT, handle_text))
 
+# ========== Run ==========
 def run_flask():
     flask_app.run(host='0.0.0.0', port=8080)
 
@@ -219,3 +225,4 @@ if __name__ == "__main__":
     init_db()
     threading.Thread(target=run_flask).start()
     application.run_polling()
+    
