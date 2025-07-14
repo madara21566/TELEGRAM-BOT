@@ -11,13 +11,13 @@ from telegram.ext import (
     filters
 )
 
-# ✅ CONFIGURATION
+# âœ… CONFIGURATION
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
 OWNER_ID = 7640327597  # Your Telegram ID
 ALLOWED_USERS = [7440046924,7669357884,7640327597,5849097477,2134530726,8128934569,7950732287,5989680310,7983528757]
 
-# ✅ ACCESS CHECK
+# âœ… ACCESS CHECK
 def is_authorized(user_id):
     return user_id in ALLOWED_USERS
 
@@ -85,8 +85,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     minutes, seconds = divmod(rem, 60)
 
     help_text = (
-        "☠️ Welcome to the VCF Bot!☠️\n\n"
-        f"🤖 Uptime: {hours}h {minutes}m {seconds}s\n\n"
+        "â˜ ï¸ Welcome to the VCF Bot!â˜ ï¸\n\n"
+        f"ðŸ¤– Uptime: {hours}h {minutes}m {seconds}s\n\n"
         "Available Commands:\n"
         "/setfilename  [ FILE NAME ]\n"
         "/setcontactname [ CONTACT NAME ]\n"
@@ -98,12 +98,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/done  [ AFTER FILE SET ]\n"
         "Send TXT, CSV, XLSX, or VCF files or numbers."
         
-        "If you are not able to use the bot then click on the help button, full details are there🤫."
+        "If you are not able to use the bot then click on the help button, full details are thereðŸ¤«."
     )
 
     keyboard = [
-        [InlineKeyboardButton("Help 📖", url="https://t.me/GODMADARAVCFMAKER")],
-        [InlineKeyboardButton("Bot status 👁️‍🗨️", url="https://telegram-bot-z3zl.onrender.com/")]
+        [InlineKeyboardButton("Help ðŸ“–", url="https://t.me/GODMADARAVCFMAKER")],
+        [InlineKeyboardButton("Bot status ðŸ‘ï¸â€ðŸ—¨ï¸", url="https://telegram-bot-z3zl.onrender.com/")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
