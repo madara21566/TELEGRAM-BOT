@@ -10,3 +10,4 @@ psutil
 platformdirs
 requests
 uvicorn
+fastapi
