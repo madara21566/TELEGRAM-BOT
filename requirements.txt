@@ -5,3 +5,7 @@ python-telegram-bot==20.3
 aiohttp
 python-telegram-bot[webhooks]
 honcho
+email-validator
+psutil
+platformdirs
+requests
