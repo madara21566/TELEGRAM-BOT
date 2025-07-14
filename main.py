@@ -2,7 +2,13 @@ import os
 import threading
 import sqlite3
 import datetime
+import time
+import psutil
+import platform
+import smtplib
+from email.mime.text import MIMEText
 from flask import Flask, render_template_string, request, redirect, session, send_file, jsonify
+from telegram import Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from NIKALLLLLLL import (
     start, set_filename, set_contact_name, set_limit, set_start,
@@ -13,9 +19,11 @@ from NIKALLLLLLL import (
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
 SECRET_KEY = os.environ.get("FLASK_SECRET", "secretkey123")
+ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID")
 
-# ✅ MANUAL ACCESS CONTROL
 ALLOWED_USERS = [7440440924, 7669357884, 7640327597, 5849079477, 2114352076, 8128934569, 7950732287, 5998603010, 7983528757]
+
+DB_FILE = "bot_stats.db"
 
 def is_authorized(user_id):
     return user_id in ALLOWED_USERS or is_authorized_in_db(user_id)
@@ -26,8 +34,7 @@ def is_authorized_in_db(user_id):
         c = conn.cursor()
         c.execute("DELETE FROM access WHERE type='temporary' AND expires_at IS NOT NULL AND datetime(expires_at) < ?", (now,))
         c.execute("SELECT * FROM access WHERE user_id=?", (user_id,))
-        row = c.fetchone()
-        return bool(row)
+        return bool(c.fetchone())
 
 def parse_duration(duration_str):
     n = int(duration_str[:-1])
@@ -37,8 +44,6 @@ def parse_duration(duration_str):
     if unit == "d": return datetime.datetime.now() + datetime.timedelta(days=n)
     return None
 
-# ========== DB Setup ==========
-DB_FILE = "bot_stats.db"
 def init_db():
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
@@ -60,11 +65,29 @@ def log_action(user_id, username, action):
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
-        c.execute("INSERT INTO logs (user_id, username, action, timestamp) VALUES (?, ?, ?, ?)",
-                  (user_id, username or 'N/A', action, now))
+        c.execute("INSERT INTO logs (user_id, username, action, timestamp) VALUES (?, ?, ?, ?)", (user_id, username or 'N/A', action, now))
         conn.commit()
 
-# ========== Flask App ==========
+    if action == 'start':
+        with sqlite3.connect(DB_FILE) as conn:
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) FROM logs WHERE user_id = ? AND timestamp > datetime('now', '-1 minute')", (user_id,))
+            if c.fetchone()[0] > 20 and ADMIN_CHAT_ID:
+                Bot(BOT_TOKEN).send_message(chat_id=ADMIN_CHAT_ID, text=f"⚠️ Suspicious: {username} ({user_id}) used /start over 20 times in 1 min.")
+
+def send_email_alert(subject, body):
+    msg = MIMEText(body)
+    msg['Subject'] = subject
+    msg['From'] = os.environ.get("ALERT_EMAIL_FROM")
+    msg['To'] = os.environ.get("ALERT_EMAIL_TO")
+    try:
+        with smtplib.SMTP(os.environ.get("SMTP_HOST"), int(os.environ.get("SMTP_PORT", 587))) as server:
+            server.starttls()
+            server.login(os.environ.get("SMTP_USER"), os.environ.get("SMTP_PASS"))
+            server.send_message(msg)
+    except Exception as e:
+        print("Email error:", e)
+
 start_time = datetime.datetime.now()
 flask_app = Flask(__name__)
 flask_app.secret_key = SECRET_KEY
@@ -84,115 +107,72 @@ def home():
     <h2>✅ Telegram Bot Live</h2>
     <p>🕒 Uptime: {{ uptime }}</p>
     <p>👥 Users: {{ users }} | 📁 Files: {{ files }}</p>
-    <p><a href='/admin'>🔐 Admin Panel</a></p>
+    <p><a href='/admin'>🔐 Admin Panel</a> | <a href='/admin/health'>❤️ Bot Health</a> | <a href='/admin/broadcast'>📢 Broadcast</a></p>
+    <div id="live-clock" style="font-size:18px;font-weight:bold;color:green;"></div>
+    <script>setInterval(() => {
+        const now = new Date();
+        document.getElementById("live-clock").innerText = "🕑 Server Time: " + now.toLocaleTimeString();
+    }, 1000);</script>
     <table border=1><tr><th>#</th><th>User</th><th>ID</th><th>Action</th><th>Time</th></tr>
     {% for row in logs %}<tr><td>{{ loop.index }}</td><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td><td>{{ row[3] }}</td></tr>{% endfor %}
     </table>
     """, uptime=uptime, users=total_users, files=total_files, logs=logs)
 
-# ========== Admin Panel ==========
-@flask_app.route('/admin', methods=['GET', 'POST'])
-def admin_login():
-    if request.method == 'POST':
-        if request.form.get('password') == ADMIN_PASSWORD:
-            session['admin'] = True
-            return redirect('/admin/dashboard')
-        return "❌ Wrong password"
-    return '''<form method=post><h3>🔐 Admin Login</h3>Password: <input type=password name=password><input type=submit value=Login></form>'''
+@flask_app.route('/admin/health')
+def health():
+    try:
+        Bot(BOT_TOKEN).get_me()
+        status = "🟢 Bot is online and responsive."
+        ok = True
+    except Exception as e:
+        status = f"🔴 Bot is down. Error: {str(e)}"
+        ok = False
+    uptime = str(datetime.datetime.now() - start_time).split('.')[0]
+    cpu = psutil.cpu_percent(interval=1)
+    mem = psutil.virtual_memory()
+    memory = f"{mem.used // (1024**2)} MB / {mem.total // (1024**2)} MB ({mem.percent}%)"
+    sysinfo = platform.platform()
+    if not ok:
+        send_email_alert('🚨 Bot Down Alert', status)
+    return render_template_string("""
+    <h2>❤️ Bot Health Monitor</h2>
+    <p>{{ status }}</p>
+    <p>⏱ Uptime: {{ uptime }}</p>
+    <p>🧠 CPU Usage: {{ cpu }}%</p>
+    <p>💾 Memory Usage: {{ memory }}</p>
+    <p>🖥 OS: {{ sysinfo }}</p>
+    <a href='/admin'>🔙 Back</a>
+    """, status=status, uptime=uptime, cpu=cpu, memory=memory, sysinfo=sysinfo)
 
-@flask_app.route('/admin/dashboard')
-def admin_dashboard():
-    if not session.get('admin'): return redirect('/admin')
-    return '''
-    <h2>📊 Admin Dashboard</h2>
-    <ul>
-        <li><a href="/admin/live-logs">📺 Live Logs</a></li>
-        <li><a href="/admin/access">🔐 Access Control</a></li>
-        <li><a href="/admin/logout">🚪 Logout</a></li>
-    </ul>
-    '''
-
-@flask_app.route('/admin/live-logs')
-def live_logs():
-    if not session.get('admin'): return redirect('/admin')
-    return """
-    <h3>📺 Live Logs</h3>
-    <div id="logbox"></div>
-    <script>
-    setInterval(() => {
-        fetch('/admin/log-feed').then(res => res.json()).then(data => {
-            document.getElementById('logbox').innerHTML = `
-            <table border=1><tr><th>#</th><th>User</th><th>ID</th><th>Action</th><th>Time</th></tr>
-            ${data.map((r,i)=>`<tr><td>${i+1}</td><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}
-            </table>`;
-        });
-    }, 3000);
-    </script>
-    """
-
-@flask_app.route('/admin/log-feed')
-def log_feed():
-    with sqlite3.connect(DB_FILE) as conn:
-        c = conn.cursor()
-        c.execute("SELECT username, user_id, action, timestamp FROM logs ORDER BY timestamp DESC LIMIT 50")
-        return jsonify(c.fetchall())
-
-@flask_app.route('/admin/access', methods=['GET', 'POST'])
-def access_panel():
+@flask_app.route('/admin/broadcast', methods=['GET', 'POST'])
+def broadcast():
     if not session.get('admin'): return redirect('/admin')
     message = ""
     if request.method == 'POST':
-        uid = int(request.form['user_id'])
-        uname = request.form['username']
-        atype = request.form['type']
-        expires_at = None
-        if atype == 'temporary':
-            expires_at = parse_duration(request.form['duration']).strftime('%Y-%m-%d %H:%M:%S')
+        text = request.form['text']
+        sent = 0
         with sqlite3.connect(DB_FILE) as conn:
             c = conn.cursor()
-            c.execute("INSERT INTO access (user_id, username, type, expires_at) VALUES (?, ?, ?, ?)",
-                      (uid, uname, atype, expires_at))
-            conn.commit()
-        message = "✅ Access granted!"
-    with sqlite3.connect(DB_FILE) as conn:
-        c = conn.cursor()
-        c.execute("DELETE FROM access WHERE type='temporary' AND expires_at IS NOT NULL AND datetime(expires_at) < ?", (datetime.datetime.now(),))
-        c.execute("SELECT * FROM access")
-        rows = c.fetchall()
+            c.execute("SELECT DISTINCT user_id FROM logs")
+            users = c.fetchall()
+        bot = Bot(BOT_TOKEN)
+        for (uid,) in users:
+            try:
+                bot.send_message(chat_id=uid, text=text)
+                sent += 1
+            except Exception as e:
+                print(f"❌ Failed to send to {uid}: {e}")
+        message = f"✅ Broadcast sent to {sent} users."
     return render_template_string("""
-    <h3>🔐 Manage Access</h3>
+    <h3>📢 Broadcast Message</h3>
     <form method=post>
-        User ID: <input name=user_id required>
-        Username: <input name=username>
-        Type: <select name=type><option value=permanent>Permanent</option><option value=temporary>Temporary</option></select>
-        Duration (1m,2h,1d): <input name=duration>
-        <input type=submit value=Add>
+        <textarea name=text rows=4 cols=50 placeholder='Your message'></textarea><br>
+        <input type=submit value=Send>
     </form>
     <p>{{msg}}</p>
-    <table border=1><tr><th>ID</th><th>User</th><th>Type</th><th>Expires</th><th>Delete</th></tr>
-    {% for r in rows %}
-        <tr><td>{{r[0]}}</td><td>{{r[1]}}</td><td>{{r[2]}}</td><td>{{r[3] or '∞'}}</td>
-        <td><a href='/admin/delaccess?uid={{r[0]}}'>❌</a></td></tr>
-    {% endfor %}
-    </table>
-    """, rows=rows, msg=message)
+    <a href='/admin'>🔙 Back</a>
+    """, msg=message)
 
-@flask_app.route('/admin/delaccess')
-def del_access():
-    if not session.get('admin'): return redirect('/admin')
-    uid = request.args.get('uid')
-    with sqlite3.connect(DB_FILE) as conn:
-        c = conn.cursor()
-        c.execute("DELETE FROM access WHERE user_id=?", (uid,))
-        conn.commit()
-    return redirect('/admin/access')
-
-@flask_app.route('/admin/logout')
-def logout():
-    session.clear()
-    return redirect('/admin')
-
-# ========== Telegram Bot ==========
 application = Application.builder().token(BOT_TOKEN).build()
 
 def protected(handler_func, command_name):
@@ -217,7 +197,6 @@ application.add_handler(CommandHandler("done", protected(done_merge, "done")))
 application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 application.add_handler(MessageHandler(filters.TEXT, handle_text))
 
-# ========== Run ==========
 def run_flask():
     flask_app.run(host='0.0.0.0', port=8080)
 
