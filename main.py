@@ -13,11 +13,12 @@ from telegram.ext import (
 from NIKALLLLLLL import (
     start, set_filename, set_contact_name, set_limit, set_start,
     set_vcf_start, make_vcf_command, merge_command, done_merge,
-    handle_document, handle_text, vcf_to_txt  # ✅ Added here
+    handle_document, handle_text
 )
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
+# ✅ Database Setup
 DB_FILE = "bot_stats.db"
 
 def init_db():
@@ -40,7 +41,10 @@ def log_action(user_id, username, action):
     conn.commit()
     conn.close()
 
+# ✅ Uptime Tracking
 start_time = datetime.datetime.now()
+
+# ✅ Flask App
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
@@ -78,6 +82,7 @@ def home():
     </body></html>
     """, uptime=uptime, total_users=total_users, total_files=total_files, logs=logs)
 
+# ✅ Wrapper for handlers to auto-log usage
 def track_usage(handler_func, command_name):
     async def wrapper(update, context):
         user = update.effective_user
@@ -85,11 +90,15 @@ def track_usage(handler_func, command_name):
         return await handler_func(update, context)
     return wrapper
 
+# ✅ Init DB
 init_db()
+
+# ✅ Run Flask in background
 
 def run_flask():
     flask_app.run(host='0.0.0.0', port=8080)
 
+# ✅ Telegram Bot Setup
 application = Application.builder().token(BOT_TOKEN).build()
 
 application.add_handler(CommandHandler("start", track_usage(start, "start")))
@@ -101,10 +110,11 @@ application.add_handler(CommandHandler("setvcfstart", track_usage(set_vcf_start,
 application.add_handler(CommandHandler("makevcf", track_usage(make_vcf_command, "makevcf")))
 application.add_handler(CommandHandler("merge", track_usage(merge_command, "merge")))
 application.add_handler(CommandHandler("done", track_usage(done_merge, "done")))
-application.add_handler(CommandHandler("vcftotxt", track_usage(vcf_to_txt, "vcftotxt")))  # ✅ New command
+application.add_handler(CommandHandler("vcftotxt", track_usage(vcf_to_txt, "vcftotxt")))
 application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 application.add_handler(MessageHandler(filters.TEXT, handle_text))
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
     application.run_polling()
+
