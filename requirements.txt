@@ -9,3 +9,4 @@ email-validator
 psutil
 platformdirs
 requests
+uvicorn
