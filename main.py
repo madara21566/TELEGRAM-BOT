@@ -110,7 +110,6 @@ application.add_handler(CommandHandler("setvcfstart", track_usage(set_vcf_start,
 application.add_handler(CommandHandler("makevcf", track_usage(make_vcf_command, "makevcf")))
 application.add_handler(CommandHandler("merge", track_usage(merge_command, "merge")))
 application.add_handler(CommandHandler("done", track_usage(done_merge, "done")))
-application.add_handler(CommandHandler("vcftotxt", track_usage(vcf_to_txt, "vcftotxt")))
 application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 application.add_handler(MessageHandler(filters.TEXT, handle_text))
 
@@ -118,3 +117,4 @@ if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
     application.run_polling()
 
+    
