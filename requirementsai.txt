@@ -1,4 +1,8 @@
 python-telegram-bot==20.6
+flask
+openai
+python-dotenv
+python-telegram-bot==20.6
 openai
 python-dotenv
 gunicorn
