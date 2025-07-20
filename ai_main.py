@@ -1,48 +1,41 @@
 import os
-import threading
-import datetime
-import sqlite3
-from flask import Flask
-from telegram.ext import Application, MessageHandler, filters
-from ai_script import handle_text, handle_document
+import openai
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    ContextTypes, filters
+)
 from dotenv import load_dotenv
 
+# Load .env
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-DB_FILE = "ai_bot_logs.db"
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+openai.api_key = OPENAI_API_KEY
 
-# Init DB
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("CREATE TABLE IF NOT EXISTS logs (user_id INTEGER, username TEXT, action TEXT, timestamp TEXT)")
-    conn.commit()
-    conn.close()
+# /start command
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("👋 Hello! I'm your ChatGPT-powered bot. Ask me anything.")
 
-def log_action(user_id, username, action):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("INSERT INTO logs (user_id, username, action, timestamp) VALUES (?, ?, ?, ?)",
-              (user_id, username or 'N/A', action, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-    conn.commit()
-    conn.close()
+# Handle user messages
+async def chatgpt_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_message = update.message.text
 
-init_db()
-start_time = datetime.datetime.now()
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",  # or gpt-4 if available
+            messages=[{"role": "user", "content": user_message}]
+        )
+        bot_reply = response.choices[0].message.content.strip()
+        await update.message.reply_text(bot_reply)
+    except Exception as e:
+        await update.message.reply_text(f"Error: {str(e)}")
 
-app = Flask(__name__)
-@app.route('/')
-def status():
-    uptime = str(datetime.datetime.now() - start_time).split('.')[0]
-    return f"<h2>🤖 AI VCF Bot Running</h2><p>Uptime: {uptime}</p>"
+# Bot app setup
+app = ApplicationBuilder().token(BOT_TOKEN).build()
+app.add_handler(CommandHandler("start", start))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chatgpt_reply))
 
-def run_flask():
-    app.run(host="0.0.0.0", port=8080)
-
-telegram_app = Application.builder().token(BOT_TOKEN).build()
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-telegram_app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-
-if __name__ == "__main__":
-    threading.Thread(target=run_flask).start()
-    telegram_app.run_polling()
+# Run the bot
+print("🤖 Bot is running...")
+app.run_polling()
