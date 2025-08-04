@@ -1,3 +1,15 @@
+pandas
+Flask
+gunicorn
+aiohttp
+python-telegram-bot[webhooks]
+honcho
+email-validator
+psutil
+platformdirs
+requests
+uvicorn
+fastapi
 flask
 openai
 python-dotenv
