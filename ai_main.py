@@ -4,7 +4,7 @@ import sqlite3
 import datetime
 from flask import Flask, render_template_string, request, redirect, session, send_file, jsonify
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-from NIKALLLLLLL import (
+from ai_script import (
     start, set_filename, set_contact_name, set_limit, set_start,
     set_vcf_start, make_vcf_command, merge_command, done_merge,
     handle_document, handle_text
