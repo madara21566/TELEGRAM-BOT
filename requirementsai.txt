@@ -13,6 +13,6 @@ fastapi
 flask
 openai
 python-dotenv
-python-telegram-bot==20.8
+python-telegram-bot==20.3
 pandas
 openpyxl
