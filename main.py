@@ -101,17 +101,13 @@ def run_flask():
 # ✅ Telegram Bot Setup
 application = Application.builder().token(BOT_TOKEN).build()
 
-application.add_handler(CommandHandler("start", track_usage(start, "start")))
-application.add_handler(CommandHandler("setfilename", track_usage(set_filename, "setfilename")))
-application.add_handler(CommandHandler("setcontactname", track_usage(set_contact_name, "setcontactname")))
-application.add_handler(CommandHandler("setlimit", track_usage(set_limit, "setlimit")))
-application.add_handler(CommandHandler("setstart", track_usage(set_start, "setstart")))
-application.add_handler(CommandHandler("setvcfstart", track_usage(set_vcf_start, "setvcfstart")))
-application.add_handler(CommandHandler("makevcf", track_usage(make_vcf_command, "makevcf")))
-application.add_handler(CommandHandler("merge", track_usage(merge_command, "merge")))
-application.add_handler(CommandHandler("done", track_usage(done_merge, "done")))
-application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-application.add_handler(MessageHandler(filters.TEXT, handle_text))
+application.app.add_handler(CommandHandler("start", start))
+application.app.add_handler(CommandHandler("rename", rename))
+application.app.add_handler(CommandHandler("setgroup", setgroup))
+application.app.add_handler(CommandHandler("setfilename", setfilename))
+application.app.add_handler(CommandHandler("txttovcf", txttovcf))
+application.app.add_handler(CommandHandler("vcftotxt", vcftotxt))
+application.app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
