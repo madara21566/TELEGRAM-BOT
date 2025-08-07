@@ -7,7 +7,7 @@ from telegram.ext import (
 # Store per-user settings in memory (for small bots)
 user_settings = {}
 
-BOT_TOKEN = "YOUR_BOT_TOKEN"  # Replace with your BotFather token
+BOT_TOKEN = "BOT_TOKEN"  # Replace with your BotFather token
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
