@@ -96,7 +96,7 @@ init_db()
 # ✅ Run Flask in background
 
 def run_flask():
-    flask_app.run(host='0.0.0.0', port=8080)
+    flask_app.run(host='0.0.0.0', port=10000)
 
 # ✅ Telegram Bot Setup
 application = Application.builder().token(BOT_TOKEN).build()
