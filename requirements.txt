@@ -1,7 +1,6 @@
 pandas
 Flask
 gunicorn
-python-telegram-bot==20.3
 aiohttp
 python-telegram-bot[webhooks]
 honcho
@@ -11,3 +10,7 @@ platformdirs
 requests
 uvicorn
 fastapi
+python-telegram-bot==20.5
+pandas
+openpyxl
+xlrd
