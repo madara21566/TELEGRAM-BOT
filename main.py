@@ -5,8 +5,9 @@ import datetime
 from flask import Flask, render_template_string, request, redirect, session, send_file, jsonify
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from NIKALLLLLLL import (
-    start, set_filename, set_contact_name, set_limit, set_start,
+    start, set_filename, set_contact_name, set_group_name, set_limit, set_start,
     set_vcf_start, make_vcf_command, merge_command, done_merge,
+    grant_command, revoke_command, listaccess_command, rename_in_file_command,
     handle_document, handle_text
 )
 
