@@ -5,9 +5,8 @@ import datetime
 from flask import Flask, render_template_string, request, redirect, session, send_file, jsonify
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from NIKALLLLLLL import (
-    start, set_filename, set_contact_name, set_group_name, set_limit, set_start,
+    start, set_filename, set_contact_name, set_limit, set_start,
     set_vcf_start, make_vcf_command, merge_command, done_merge,
-    grant_command, revoke_command, listaccess_command, rename_in_file_command,
     handle_document, handle_text
 )
 
@@ -16,7 +15,7 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
 SECRET_KEY = os.environ.get("FLASK_SECRET", "secretkey123")
 
 # ✅ MANUAL ACCESS CONTROL
-ALLOWED_USERS = [7043391463,7440046924,7118726445,7492026653,7440046924,7669357884,7640327597,5849097477,8128934569,7950732287,5989680310,7983528757,5564571047]
+ALLOWED_USERS = [7043391463,7440046924,7118726445,7492026653,7440046924,7669357884,7640327597,5849097477,8128934569,7950732287,7983528757,5564571047]
 
 def is_authorized(user_id):
     return user_id in ALLOWED_USERS or is_authorized_in_db(user_id)
@@ -205,23 +204,18 @@ def protected(handler_func, command_name):
         log_action(user.id, user.username, command_name)
         return await handler_func(update, context)
     return wrapper
-    
-    application.app.add_handler(CommandHandler('start', start))
-    application.app.add_handler(CommandHandler('setfilename', set_filename))
-    application.app.add_handler(CommandHandler('setcontactname', set_contact_name))
-    application.app.add_handler(CommandHandler('setgroup', set_group_name))
-    application.app.add_handler(CommandHandler('setlimit', set_limit))
-    application.app.add_handler(CommandHandler('setstart', set_start))
-    application.app.add_handler(CommandHandler('setvcfstart', set_vcf_start))
-    application.app.add_handler(CommandHandler('makevcf', make_vcf_command))
-    application.app.add_handler(CommandHandler('merge', merge_command))
-    application.app.add_handler(CommandHandler('done', done_merge))
-    application.app.add_handler(CommandHandler('grant', grant_command))
-    application.app.add_handler(CommandHandler('revoke', revoke_command))
-    application.app.add_handler(CommandHandler('listaccess', listaccess_command))
-    application.app.add_handler(CommandHandler('renamefile', rename_in_file_command))
-    application.app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-    application.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+application.add_handler(CommandHandler("start", protected(start, "start")))
+application.add_handler(CommandHandler("setfilename", protected(set_filename, "setfilename")))
+application.add_handler(CommandHandler("setcontactname", protected(set_contact_name, "setcontactname")))
+application.add_handler(CommandHandler("setlimit", protected(set_limit, "setlimit")))
+application.add_handler(CommandHandler("setstart", protected(set_start, "setstart")))
+application.add_handler(CommandHandler("setvcfstart", protected(set_vcf_start, "setvcfstart")))
+application.add_handler(CommandHandler("makevcf", protected(make_vcf_command, "makevcf")))
+application.add_handler(CommandHandler("merge", protected(merge_command, "merge")))
+application.add_handler(CommandHandler("done", protected(done_merge, "done")))
+application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+application.add_handler(MessageHandler(filters.TEXT, handle_text))
 
 # ========== Run ==========
 def run_flask():
