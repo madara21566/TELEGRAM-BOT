@@ -1,161 +1,278 @@
 import os
 import re
+import tempfile
+import logging
+from datetime import datetime, timedelta
+from typing import Set, List, Dict, Optional
+
 import pandas as pd
-from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
     ContextTypes,
-    filters
+    filters,
 )
 
-# ✅ CONFIGURATION
+# ----------------- CONFIG -----------------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
-OWNER_ID = 7640327597  # Your Telegram ID
+try:
+    OWNER_ID = int(os.environ.get("OWNER_ID", "7640327597"))
+except Exception:
+    OWNER_ID = 7640327597
+
+# Pre-seeded allowed users (keeps existing behavior)
 ALLOWED_USERS = [7043391463,7440046924,7118726445,7492026653,7440046924,7669357884,7640327597,5849097477,8128934569,7950732287,5989680310,7983528757,5564571047]
+# Temporary access expirations: user_id -> datetime when access expires (or removed)
+access_expirations: Dict[int, Optional[datetime]] = {}
 
-# ✅ ACCESS CHECK
-def is_authorized(user_id):
-    return user_id in ALLOWED_USERS
-
-def has_access_level(user_id, required_level):
-    return user_id in ALLOWED_USERS
-
-# BOT START TIME
+# ----------------- DEFAULTS & USER STATE -----------------
 BOT_START_TIME = datetime.utcnow()
 
-# DEFAULTS
 default_vcf_name = "Contacts"
 default_contact_name = "Contact"
 default_limit = 100
 default_start_index = 1
 default_vcf_start_number = 1
 
-# USER SETTINGS
-user_file_names = {}
-user_contact_names = {}
-user_limits = {}
-user_start_indexes = {}
-user_vcf_start_numbers = {}
-merge_data = {}
+# Per-user settings and transient state
+user_file_names: Dict[int, str] = {}
+user_contact_names: Dict[int, str] = {}
+user_limits: Dict[int, int] = {}
+user_start_indexes: Dict[int, int] = {}
+user_vcf_start_numbers: Dict[int, int] = {}
+user_group_names: Dict[int, str] = {}
+merge_data: Dict[int, Dict] = {}
+user_last_uploaded_file: Dict[int, str] = {}
+user_command_mode: Dict[int, Optional[str]] = {}  # 'info','fixvcf','vcftotxt','txttovcf'
 
-# VCF Generation
-def generate_vcf(numbers, filename="Contacts", contact_name="Contact", start_index=1):
+# ----------------- LOGGING -----------------
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# ----------------- HELPERS -----------------
+def now_utc():
+    return datetime.utcnow()
+
+def is_authorized(user_id: int) -> bool:
+    # permanent list
+    if user_id in ALLOWED_USERS:
+        return True
+    exp = access_expirations.get(user_id)
+    if exp and exp > now_utc():
+        return True
+    # expired: cleanup
+    if exp and exp <= now_utc():
+        access_expirations.pop(user_id, None)
+    return False
+
+def grant_access(user_ids: List[int], duration_minutes: Optional[int] = None):
+    for uid in user_ids:
+        if duration_minutes is None:
+            if uid not in ALLOWED_USERS:
+                ALLOWED_USERS.append(uid)
+            access_expirations.pop(uid, None)
+        else:
+            access_expirations[uid] = now_utc() + timedelta(minutes=duration_minutes)
+
+def revoke_access(user_ids: List[int]):
+    for uid in user_ids:
+        if uid in ALLOWED_USERS:
+            try:
+                ALLOWED_USERS.remove(uid)
+            except ValueError:
+                pass
+        access_expirations.pop(uid, None)
+
+# ----------------- VCF / TXT utilities -----------------
+def generate_vcf(numbers: List[str], filename: str = "Contacts", contact_name: str = "Contact", start_index: int = 1, group: Optional[str] = None) -> str:
     vcf_data = ""
     for i, num in enumerate(numbers, start=start_index):
         name = f"{contact_name}{str(i).zfill(3)}"
+        if group:
+            name = f"{name} {group}"
         vcf_data += f"BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nTEL;TYPE=CELL:{num}\nEND:VCARD\n"
-    with open(f"{filename}.vcf", "w") as f:
+    path = f"{filename}.vcf"
+    with open(path, "w", encoding="utf-8") as f:
         f.write(vcf_data)
-    return f"{filename}.vcf"
+    return path
 
-def extract_numbers_from_vcf(file_path):
+def extract_numbers_from_vcf(file_path: str) -> Set[str]:
     numbers = set()
-    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-        content = f.read()
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+    except Exception:
+        return set()
     for card in content.split('END:VCARD'):
-        if 'TEL' in card:
-            tel_lines = [line for line in card.splitlines() if line.startswith('TEL')]
-            for line in tel_lines:
-                number = re.sub(r'[^0-9]', '', line.split(':')[-1].strip())
-                if number:
-                    numbers.add(number)
+        if not card.strip():
+            continue
+        for line in card.splitlines():
+            if line.upper().startswith('TEL'):
+                num = re.sub(r'[^0-9]', '', line.split(':')[-1].strip())
+                if num:
+                    numbers.add(num)
     return numbers
 
-def extract_numbers_from_txt(file_path):
+def extract_details_from_vcf(file_path: str) -> Dict:
+    details = {
+        'total_cards': 0,
+        'unique_numbers': set(),
+        'duplicate_numbers': 0,
+        'names': [],
+        'emails': set(),
+        'name_lengths': []
+    }
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+    except Exception:
+        return details
+
+    cards = [c for c in content.split('END:VCARD') if c.strip()]
+    details['total_cards'] = len(cards)
+    for card in cards:
+        fn_lines = [l for l in card.splitlines() if l.upper().startswith('FN:')]
+        name = fn_lines[0].split(':',1)[1].strip() if fn_lines else ''
+        if name:
+            details['names'].append(name)
+            details['name_lengths'].append(len(name))
+        tel_lines = [line for line in card.splitlines() if line.upper().startswith('TEL')]
+        for line in tel_lines:
+            number = re.sub(r'[^0-9]', '', line.split(':')[-1].strip())
+            if number:
+                if number in details['unique_numbers']:
+                    details['duplicate_numbers'] += 1
+                details['unique_numbers'].add(number)
+        em_lines = [l for l in card.splitlines() if l.upper().startswith('EMAIL')]
+        for el in em_lines:
+            parts = el.split(':', 1)
+            if len(parts) > 1:
+                details['emails'].add(parts[1].strip())
+    return details
+
+def extract_numbers_from_txt(file_path: str) -> Set[str]:
     numbers = set()
-    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-        for line in f:
-            nums = re.findall(r'\d{7,}', line)
-            numbers.update(nums)
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                nums = re.findall(r'\d{7,}', line)
+                numbers.update(nums)
+    except Exception:
+        pass
     return numbers
 
-# COMMANDS
+def txt_from_numbers(numbers: List[str], filename: str = 'numbers') -> str:
+    path = f"{filename}.txt"
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(numbers))
+    return path
 
+# ----------------- COMMAND HANDLERS -----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update.effective_user.id):
+    user = update.effective_user
+    if not is_authorized(user.id):
         await update.message.reply_text("Unauthorized. Contact the bot owner.")
         return
 
-    uptime_duration = datetime.utcnow() - BOT_START_TIME
-    hours, rem = divmod(uptime_duration.seconds, 3600)
+    uptime_duration = now_utc() - BOT_START_TIME
+    hours, rem = divmod(int(uptime_duration.total_seconds()), 3600)
     minutes, seconds = divmod(rem, 60)
 
     help_text = (
-        "☠️ Welcome to the VCF Bot!☠️\n\n"
+        "☠️ Welcome to the VCF Bot! (updated) ☠️\n\n"
         f"🤖 Uptime: {hours}h {minutes}m {seconds}s\n\n"
         "Available Commands:\n"
-        "/setfilename  [ FILE NAME ]\n"
+        "/setfilename [ FILE NAME ]\n"
         "/setcontactname [ CONTACT NAME ]\n"
+        "/setgroup [ GROUP NAME ]    - append group to each contact's name\n"
         "/setlimit [ PER VCF CONTACT ]\n"
         "/setstart [ CONTACT NUMBERING START ]\n"
         "/setvcfstart [ VCF NUMBERING START ]\n"
         "/makevcf [ NAME 9876543210 ]\n"
-        "/merge [ VCF NAME SET ]\n"
-        "/done  [ AFTER FILE SET ]\n"
-        "Send TXT, CSV, XLSX, or VCF files or numbers."
-        
-        "If you are not able to use the bot then click on the help button, full details are there🤫."
+        "/merge [ VCF_NAME ]  then send files and /done\n"
+        "/info  - send a VCF file with this command to get detailed info\n"
+        "/fixvcf - send a VCF file with this command to get cleaned VCF (duplicates removed)\n"
+        "/vcftotxt - send a VCF file with this command to receive a TXT of numbers\n"
+        "/txttovcf - send a TXT file with this command to receive a VCF\n"
+        "/grant <id1> [id2 id3 ...] [minutes=60] - grant access (minutes optional)\n"
+        "/revoke <id1> [id2 ...] - revoke access\n"
+        "/listaccess - show allowed users and temporary grants\n"
     )
-
     keyboard = [
         [InlineKeyboardButton("Help 📖", url="https://t.me/GODMADARAVCFMAKER")],
-        [InlineKeyboardButton("Bot status 👁️‍🗨️", url="https://telegram-bot-z3zl.onrender.com/")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(help_text, reply_markup=reply_markup)
 
 async def set_filename(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
+    if not is_authorized(update.effective_user.id):
+        return
     if context.args:
         user_file_names[update.effective_user.id] = ' '.join(context.args)
         await update.message.reply_text(f"File name set to: {' '.join(context.args)}")
 
 async def set_contact_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
+    if not is_authorized(update.effective_user.id):
+        return
     if context.args:
         user_contact_names[update.effective_user.id] = ' '.join(context.args)
         await update.message.reply_text(f"Contact name prefix set to: {' '.join(context.args)}")
 
+async def set_group_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update.effective_user.id):
+        return
+    if context.args:
+        user_group_names[update.effective_user.id] = ' '.join(context.args)
+        await update.message.reply_text(f"Group name set to: {' '.join(context.args)}")
+
 async def set_limit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
+    if not is_authorized(update.effective_user.id):
+        return
     if context.args and context.args[0].isdigit():
         user_limits[update.effective_user.id] = int(context.args[0])
         await update.message.reply_text(f"VCF contact limit set to {context.args[0]}")
 
 async def set_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
+    if not is_authorized(update.effective_user.id):
+        return
     if context.args and context.args[0].isdigit():
         user_start_indexes[update.effective_user.id] = int(context.args[0])
         await update.message.reply_text(f"Start index set to {context.args[0]}.")
 
 async def set_vcf_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
+    if not is_authorized(update.effective_user.id):
+        return
     if context.args and context.args[0].isdigit():
         user_vcf_start_numbers[update.effective_user.id] = int(context.args[0])
         await update.message.reply_text(f"VCF numbering will start from {context.args[0]}.")
 
 async def make_vcf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
-    if len(context.args) != 2:
+    if not is_authorized(update.effective_user.id):
+        return
+    if len(context.args) < 2:
         await update.message.reply_text("Usage: /makevcf Name 9876543210")
         return
-    name, number = context.args
-    if not number.isdigit():
+    name = context.args[0]
+    number = ''.join(re.findall(r'\d+', ' '.join(context.args[1:])))
+    if not number or len(number) < 7:
         await update.message.reply_text("Invalid phone number.")
         return
     file_name = f"{name}.vcf"
-    with open(file_name, "w") as f:
+    with open(file_name, "w", encoding="utf-8") as f:
         f.write(f"BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nTEL;TYPE=CELL:{number}\nEND:VCARD\n")
     await update.message.reply_document(document=open(file_name, "rb"))
-    os.remove(file_name)
+    try:
+        os.remove(file_name)
+    except Exception:
+        pass
 
 async def merge_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
+    if not is_authorized(update.effective_user.id):
+        return
     if not context.args:
         await update.message.reply_text("Usage: /merge output_filename")
         return
@@ -163,7 +280,7 @@ async def merge_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     merge_data[user_id] = {'output_name': output_name, 'numbers': set()}
     await update.message.reply_text(
-        f"Merge started. Send VCF or TXT files.\nFinal file: {output_name}.vcf\nSend /done when ready."
+        f"Merge started. Send VCF/TXT/CSV/XLSX files. Final file: {output_name}.vcf\nSend /done when ready."
     )
 
 async def done_merge(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -173,109 +290,208 @@ async def done_merge(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     session = merge_data[user_id]
     if not session['numbers']:
-        await update.message.reply_text("No numbers found.")
+        await update.message.reply_text("No numbers found in merge session.")
         del merge_data[user_id]
         return
     output_path = f"{session['output_name']}.vcf"
     contact_name = user_contact_names.get(user_id, default_contact_name)
     start_index = user_start_indexes.get(user_id, default_start_index)
-    vcf_data = ""
-    for i, num in enumerate(sorted(session['numbers']), start=start_index):
-        name = f"{contact_name}{str(i).zfill(3)}"
-        vcf_data += f"BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nTEL;TYPE=CELL:{num}\nEND:VCARD\n"
-    with open(output_path, 'w') as f:
-        f.write(vcf_data)
-    await update.message.reply_document(document=open(output_path, 'rb'))
-    os.remove(output_path)
+    group = user_group_names.get(user_id)
+    numbers = sorted(session['numbers'])
+    out = generate_vcf(numbers, session['output_name'], contact_name, start_index, group)
+    await update.message.reply_document(document=open(out, 'rb'))
+    try:
+        os.remove(out)
+    except Exception:
+        pass
     await update.message.reply_text("Merge complete.")
     del merge_data[user_id]
 
+# Document handlers and command-mode flags
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update.effective_user.id): return
+    if not is_authorized(update.effective_user.id):
+        return
 
     file = update.message.document
-    path = f"{file.file_unique_id}_{file.file_name}"
+    user_id = update.effective_user.id
+    temp_dir = tempfile.gettempdir()
+    safe_name = re.sub(r'[^A-Za-z0-9_.-]', '_', file.file_name)
+    path = os.path.join(temp_dir, f"{file.file_unique_id}_{safe_name}")
     await (await context.bot.get_file(file.file_id)).download_to_drive(path)
 
-    file_ext = path.split('.')[-1].lower()
+    # remember last uploaded file for this user (used by renamefile)
+    user_last_uploaded_file[user_id] = path
 
-    if update.effective_user.id in merge_data:
+    mode = user_command_mode.get(user_id)
+
+    # merge mode handling
+    if user_id in merge_data:
+        file_ext = path.split('.')[-1].lower()
+        numbers = set()
         if file_ext == 'vcf':
             numbers = extract_numbers_from_vcf(path)
         elif file_ext == 'txt':
             numbers = extract_numbers_from_txt(path)
+        elif file_ext == 'csv':
+            try:
+                df = pd.read_csv(path, encoding='utf-8', low_memory=False)
+                for col in df.columns:
+                    vals = df[col].astype(str).tolist()
+                    for v in vals:
+                        nums = re.findall(r'\d{7,}', v)
+                        numbers.update(nums)
+            except Exception:
+                pass
+        elif file_ext in ('xls','xlsx'):
+            try:
+                df = pd.read_excel(path)
+                for col in df.columns:
+                    vals = df[col].astype(str).tolist()
+                    for v in vals:
+                        nums = re.findall(r'\d{7,}', v)
+                        numbers.update(nums)
+            except Exception:
+                pass
         else:
-            await update.message.reply_text("Only VCF and TXT supported in merge mode.")
-            os.remove(path)
+            await update.message.reply_text("Only VCF, TXT, CSV, XLSX supported in merge mode.")
+            try:
+                os.remove(path)
+            except Exception:
+                pass
             return
-        merge_data[update.effective_user.id]['numbers'].update(numbers)
-        os.remove(path)
-        await update.message.reply_text(f"Added {len(numbers)} numbers. Send /done to finish.")
+        merge_data[user_id]['numbers'].update(numbers)
+        await update.message.reply_text(f"Added {len(numbers)} numbers to merge. Send /done to finish.")
+        try:
+            os.remove(path)
+        except Exception:
+            pass
         return
 
+    # If user invoked /info or /fixvcf or vcftotxt or txttovcf, perform action
+    if mode == 'info':
+        details = extract_details_from_vcf(path)
+        total_cards = details['total_cards']
+        unique = len(details['unique_numbers'])
+        dup = details['duplicate_numbers']
+        emails = len(details['emails'])
+        avg_name_len = (sum(details['name_lengths'])/len(details['name_lengths'])) if details['name_lengths'] else 0
+        msg = (
+            f"📄 File: {os.path.basename(path)}\n"
+            f"👥 Total vCards: {total_cards}\n"
+            f"🔢 Unique phone numbers: {unique}\n"
+            f"⚠️ Duplicate phone entries: {dup}\n"
+            f"✉️ Contacts with email: {emails}\n"
+            f"🔤 Avg name length: {avg_name_len:.1f}\n"
+        )
+        await update.message.reply_text(msg)
+        user_command_mode[user_id] = None
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+        return
+
+    if mode == 'fixvcf':
+        details = extract_details_from_vcf(path)
+        numbers = sorted(details['unique_numbers'])
+        contact_name = user_contact_names.get(user_id, default_contact_name)
+        start_index = user_start_indexes.get(user_id, default_start_index)
+        group = user_group_names.get(user_id)
+        out_name = user_file_names.get(user_id, default_vcf_name) + "_fixed"
+        out_path = generate_vcf(numbers, out_name, contact_name, start_index, group)
+        await update.message.reply_document(document=open(out_path, 'rb'))
+        await update.message.reply_text(f"Fixed VCF created: {os.path.basename(out_path)}")
+        user_command_mode[user_id] = None
+        try:
+            os.remove(path)
+            os.remove(out_path)
+        except Exception:
+            pass
+        return
+
+    if mode == 'vcftotxt':
+        numbers = extract_numbers_from_vcf(path)
+        out_path = txt_from_numbers(sorted(numbers), filename=user_file_names.get(user_id, 'numbers'))
+        await update.message.reply_document(document=open(out_path, 'rb'))
+        user_command_mode[user_id] = None
+        try:
+            os.remove(path)
+            os.remove(out_path)
+        except Exception:
+            pass
+        return
+
+    if mode == 'txttovcf':
+        numbers = extract_numbers_from_txt(path)
+        contact_name = user_contact_names.get(user_id, default_contact_name)
+        start_index = user_start_indexes.get(user_id, default_start_index)
+        out_name = user_file_names.get(user_id, default_vcf_name)
+        group = user_group_names.get(user_id)
+        out_path = generate_vcf(sorted(numbers), out_name, contact_name, start_index, group)
+        await update.message.reply_document(document=open(out_path, 'rb'))
+        user_command_mode[user_id] = None
+        try:
+            os.remove(path)
+            os.remove(out_path)
+        except Exception:
+            pass
+        return
+
+    # Default: general file processing (try to extract numbers and make vcf chunks)
     try:
-        if path.endswith('.csv'):
-            df = pd.read_csv(path, encoding='utf-8')
-        elif path.endswith('.xlsx'):
+        file_ext = path.split('.')[-1].lower()
+        numbers = []
+        if file_ext == 'csv':
+            df = pd.read_csv(path, encoding='utf-8', low_memory=False)
+            for col in df.columns:
+                values = df[col].astype(str).tolist()
+                for v in values:
+                    nums = re.findall(r'\d{7,}', v)
+                    numbers.extend(nums)
+        elif file_ext in ('xls','xlsx'):
             df = pd.read_excel(path)
-        elif path.endswith('.txt'):
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-            except UnicodeDecodeError:
-                with open(path, 'r', encoding='latin-1') as f:
-                    content = f.read()
-            numbers = [''.join(filter(str.isdigit, w)) for w in content.split() if len(w) >=7]
-            df = pd.DataFrame({'Numbers': numbers})
-        elif path.endswith('.vcf'):
-            numbers = extract_numbers_from_vcf(path)
-            df = pd.DataFrame({'Numbers': list(numbers)})
+            for col in df.columns:
+                values = df[col].astype(str).tolist()
+                for v in values:
+                    nums = re.findall(r'\d{7,}', v)
+                    numbers.extend(nums)
+        elif file_ext == 'txt':
+            numbers = [''.join(filter(str.isdigit, w)) for w in open(path, 'r', encoding='utf-8', errors='ignore').read().split() if len(''.join(filter(str.isdigit, w))) >=7]
+        elif file_ext == 'vcf':
+            numbers = list(extract_numbers_from_vcf(path))
         else:
             await update.message.reply_text("Unsupported file type.")
+            try:
+                os.remove(path)
+            except Exception:
+                pass
             return
-        await process_numbers(update, context, df['Numbers'].dropna().astype(str).tolist())
+        await process_numbers(update, context, numbers)
     except Exception as e:
-        await update.message.reply_text(f"Error processing file: {str(e)}")
+        await update.message.reply_text(f"Error processing file: {e}")
     finally:
-        if os.path.exists(path):
-            os.remove(path)
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update.effective_user.id): return
-    numbers = [''.join(filter(str.isdigit, w)) for w in update.message.text.split() if len(w) >=7]
-    if numbers:
-        await process_numbers(update, context, numbers)
-    else:
-        await update.message.reply_text("No valid numbers found.")
+    if not is_authorized(update.effective_user.id):
+        return
+    text = update.message.text.strip()
 
-async def process_numbers(update, context, numbers):
-    user_id = update.effective_user.id
-    contact_name = user_contact_names.get(user_id, default_contact_name)
-    file_base = user_file_names.get(user_id, default_vcf_name)
-    limit = user_limits.get(user_id, default_limit)
-    start_index = user_start_indexes.get(user_id, default_start_index)
-    vcf_num = user_vcf_start_numbers.get(user_id, default_vcf_start_number)
-    numbers = list(dict.fromkeys([n.strip() for n in numbers if n.strip().isdigit()]))
-    chunks = [numbers[i:i+limit] for i in range(0, len(numbers), limit)]
-    for idx, chunk in enumerate(chunks):
-        file_path = generate_vcf(chunk, f"{file_base}_{vcf_num+idx}", contact_name, start_index+idx*limit)
-        await update.message.reply_document(document=open(file_path, "rb"))
-        os.remove(file_path)
-
-if __name__ == '__main__':
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('setfilename', set_filename))
-    app.add_handler(CommandHandler('setcontactname', set_contact_name))
-    app.add_handler(CommandHandler('setlimit', set_limit))
-    app.add_handler(CommandHandler('setstart', set_start))
-    app.add_handler(CommandHandler('setvcfstart', set_vcf_start))
-    app.add_handler(CommandHandler('makevcf', make_vcf_command))
-    app.add_handler(CommandHandler('merge', merge_command))
-    app.add_handler(CommandHandler('done', done_merge))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    app.run_polling()
-
-
-    
+    # commands that switch next document mode
+    if text.lower().startswith('/info'):
+        user_command_mode[update.effective_user.id] = 'info'
+        await update.message.reply_text("Send the VCF file you want info about.")
+        return
+    if text.lower().startswith('/fixvcf'):
+        user_command_mode[update.effective_user.id] = 'fixvcf'
+        await update.message.reply_text("Send the VCF file to fix (duplicates will be removed).")
+        return
+    if text.lower().startswith('/vcftotxt'):
+        user_command_mode[update.effective_user.id] = 'vcftotxt'
+        await update.message.reply_text("Send the VCF file to convert to TXT.")
+        return
+    if text.lower()
