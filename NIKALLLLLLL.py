@@ -19,9 +19,8 @@ from telegram.ext import (
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
 try:
-    OWNER_ID = int(os.environ.get("OWNER_ID", "7640327597"))
+    OWNER_ID = os.environ.get("OWNER_ID")
 except Exception:
-    OWNER_ID = 7640327597
 
 # Pre-seeded allowed users (keeps existing behavior)
 ALLOWED_USERS = [7043391463,7440046924,7118726445,7492026653,7440046924,7669357884,7640327597,5849097477,8128934569,7950732287,7983528757,5564571047]
@@ -622,9 +621,8 @@ def main():
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN not set. Exiting.")
         return
+    if __name__ == '__main__':
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    # core handlers (keep existing behaviour)
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('setfilename', set_filename))
     app.add_handler(CommandHandler('setcontactname', set_contact_name))
@@ -648,6 +646,3 @@ def main():
 
     logger.info("Bot starting...")
     app.run_polling()
-
-if __name__ == '__main__':
-    main()
