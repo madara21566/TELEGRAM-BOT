@@ -24,7 +24,7 @@ except Exception:
     OWNER_ID = 7640327597
 
 # Pre-seeded allowed users (keeps existing behavior)
-ALLOWED_USERS = [7043391463,7440046924,7118726445,7492026653,7440046924,7669357884,7640327597,5849097477,8128934569,7950732287,5989680310,7983528757,5564571047]
+ALLOWED_USERS = [7043391463,7440046924,7118726445,7492026653,7440046924,7669357884,7640327597,5849097477,8128934569,7950732287,7983528757,5564571047]
 # Temporary access expirations: user_id -> datetime when access expires (or removed)
 access_expirations: Dict[int, Optional[datetime]] = {}
 
@@ -494,4 +494,160 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_command_mode[update.effective_user.id] = 'vcftotxt'
         await update.message.reply_text("Send the VCF file to convert to TXT.")
         return
-    if text.lower()
+    if text.lower().startswith('/txttovcf'):
+        user_command_mode[update.effective_user.id] = 'txttovcf'
+        await update.message.reply_text("Send the TXT file to convert to VCF.")
+        return
+
+    # grant/revoke/list handled by commands; otherwise try to parse numbers from
+      # grant/revoke/list handled by commands; otherwise try to parse numbers from text
+    numbers = [''.join(filter(str.isdigit, w)) for w in text.split() if len(''.join(filter(str.isdigit, w))) >=7]
+    if numbers:
+        await process_numbers(update, context, numbers)
+    else:
+        await update.message.reply_text("No valid numbers found. Use commands like /info, /fixvcf, /vcftotxt, /txttovcf or send files.")
+
+async def process_numbers(update: Update, context: ContextTypes.DEFAULT_TYPE, numbers: List[str]):
+    user_id = update.effective_user.id
+    contact_name = user_contact_names.get(user_id, default_contact_name)
+    file_base = user_file_names.get(user_id, default_vcf_name)
+    limit = user_limits.get(user_id, default_limit)
+    start_index = user_start_indexes.get(user_id, default_start_index)
+    vcf_num = user_vcf_start_numbers.get(user_id, default_vcf_start_number)
+    group = user_group_names.get(user_id)
+
+    # sanitize and keep only digits, dedupe preserving order
+    cleaned = []
+    seen = set()
+    for n in numbers:
+        s = re.sub(r'[^0-9]', '', str(n)).strip()
+        if s and s.isdigit() and len(s) >=7 and s not in seen:
+            cleaned.append(s)
+            seen.add(s)
+
+    if not cleaned:
+        await update.message.reply_text("No valid numbers found after sanitization.")
+        return
+
+    # split into chunks based on limit
+    chunks = [cleaned[i:i+limit] for i in range(0, len(cleaned), limit)]
+    for idx, chunk in enumerate(chunks):
+        out_name = f"{file_base}_{vcf_num+idx}"
+        file_path = generate_vcf(chunk, out_name, contact_name, start_index + idx*limit, group)
+        await update.message.reply_document(document=open(file_path, "rb"))
+        try:
+            os.remove(file_path)
+        except Exception:
+            pass
+
+# ---------------- Access control commands ---------------
+async def grant_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != OWNER_ID:
+        await update.message.reply_text("Only owner can grant access.")
+        return
+    if not context.args:
+        await update.message.reply_text("Usage: /grant <id1> [id2 ...] [minutes=60]")
+        return
+    args = []
+    minutes = None
+    for a in context.args:
+        if a.startswith('minutes='):
+            try:
+                minutes = int(a.split('=',1)[1])
+            except Exception:
+                minutes = None
+        else:
+            if a.isdigit():
+                args.append(int(a))
+    if not args:
+        await update.message.reply_text("No user ids found to grant.")
+        return
+    grant_access(args, duration_minutes=minutes)
+    await update.message.reply_text(f"Granted access to: {args} (minutes={minutes})")
+
+async def revoke_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != OWNER_ID:
+        await update.message.reply_text("Only owner can revoke access.")
+        return
+    if not context.args:
+        await update.message.reply_text("Usage: /revoke <id1> [id2 ...]")
+        return
+    ids = [int(a) for a in context.args if a.isdigit()]
+    revoke_access(ids)
+    await update.message.reply_text(f"Revoked access for: {ids}")
+
+async def listaccess_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update.effective_user.id):
+        await update.message.reply_text("Unauthorized.")
+        return
+    lines = [f"Permanent allowed users: {ALLOWED_USERS}"]
+    if access_expirations:
+        lines.append("Temporary grants:")
+        for uid, exp in access_expirations.items():
+            lines.append(f" - {uid}: expires at {exp} UTC")
+    await update.message.reply_text('\n'.join(lines))
+
+# ----------------- Small utilities: rename inside vcf -----------------
+async def rename_in_file_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # usage: /renamefile old new  (operate on last uploaded file)
+    if not is_authorized(update.effective_user.id):
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text("Usage: /renamefile <old> <new>\nThis operates on your last uploaded file.")
+        return
+    old = context.args[0]
+    new = ' '.join(context.args[1:])
+    user_id = update.effective_user.id
+    src = user_last_uploaded_file.get(user_id)
+    if not src or not os.path.exists(src):
+        await update.message.reply_text("No recent uploaded file found. Upload the file first.")
+        return
+    try:
+        with open(src, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        new_content = content.replace(old, new)
+        out_path = src + '.renamed.vcf'
+        with open(out_path, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+        await update.message.reply_document(document=open(out_path, 'rb'))
+        try:
+            os.remove(out_path)
+        except Exception:
+            pass
+    except Exception as e:
+        await update.message.reply_text(f"Rename failed: {e}")
+
+# ----------------- STARTUP -----------------
+def main():
+    if not BOT_TOKEN:
+        logger.error("BOT_TOKEN not set. Exiting.")
+        return
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    # core handlers (keep existing behaviour)
+    app.add_handler(CommandHandler('start', start))
+    app.add_handler(CommandHandler('setfilename', set_filename))
+    app.add_handler(CommandHandler('setcontactname', set_contact_name))
+    app.add_handler(CommandHandler('setgroup', set_group_name))
+    app.add_handler(CommandHandler('setlimit', set_limit))
+    app.add_handler(CommandHandler('setstart', set_start))
+    app.add_handler(CommandHandler('setvcfstart', set_vcf_start))
+    app.add_handler(CommandHandler('makevcf', make_vcf_command))
+    app.add_handler(CommandHandler('merge', merge_command))
+    app.add_handler(CommandHandler('done', done_merge))
+
+    # new commands
+    app.add_handler(CommandHandler('grant', grant_command))
+    app.add_handler(CommandHandler('revoke', revoke_command))
+    app.add_handler(CommandHandler('listaccess', listaccess_command))
+    app.add_handler(CommandHandler('renamefile', rename_in_file_command))
+
+    # document and text handlers (preserve original routes)
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+    logger.info("Bot starting...")
+    app.run_polling()
+
+if __name__ == '__main__':
+    main()
