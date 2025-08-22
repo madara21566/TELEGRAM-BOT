@@ -2,6 +2,9 @@ import os
 import threading
 import sqlite3
 import datetime
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from flask import Flask, render_template_string, request, redirect, session, send_file, jsonify
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from NIKALLLLLLL import (
@@ -13,6 +16,27 @@ from NIKALLLLLLL import (
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
 SECRET_KEY = os.environ.get("FLASK_SECRET", "secretkey123")
+
+# Email config
+EMAIL_USER = os.environ.get("EMAIL_USER")
+EMAIL_PASS = os.environ.get("EMAIL_PASS")
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL")
+
+def send_email(subject, body):
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_USER
+        msg['To'] = ADMIN_EMAIL
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(EMAIL_USER, EMAIL_PASS)
+        server.sendmail(EMAIL_USER, ADMIN_EMAIL, msg.as_string())
+        server.quit()
+    except Exception as e:
+        print("❌ Email error:", e)
 
 # ✅ MANUAL ACCESS CONTROL
 ALLOWED_USERS = [8047407478,7043391463,7440046924,7118726445,7492026653,5989680310,7440046924,7669357884,7640327597,5849097477,8128934569,7950732287,5989680310,7983528757,5564571047]
@@ -217,11 +241,40 @@ def protected(handler_func, command_name):
     async def wrapper(update, context):
         user = update.effective_user
         if not is_authorized(user.id):
-            await update.message.reply_text("❌ You don't have access to use this bot.")
+            await update.message.reply_text("❌ Sorry, you don’t have access to use this bot.\n\n👉 Contact admin to request access.")
+            send_email("🚨 Unauthorized Access Attempt", f"User @{user.username} ({user.id}) tried to access the bot.")
             return
+        # Temporary access expiry check
+        with sqlite3.connect(DB_FILE) as conn:
+            c = conn.cursor()
+            c.execute("SELECT type, expires_at FROM access WHERE user_id=?", (user.id,))
+            row = c.fetchone()
+            if row and row[0] == 'temporary' and row[1]:
+                expires = datetime.datetime.fromisoformat(row[1])
+                remaining = expires - datetime.datetime.now()
+                if remaining.total_seconds() < 3600:
+                    await update.message.reply_text(f"⚠️ Your temporary access will expire in {remaining}.")
+                    send_email("⚠️ Temporary Access Expiring", f"User @{user.username} ({user.id}) access expiring at {row[1]}.")
         log_action(user.id, user.username, command_name)
         return await handler_func(update, context)
     return wrapper
+
+# 📊 Stats Command
+async def stats(update, context):
+    user = update.effective_user
+    with sqlite3.connect(DB_FILE) as conn:
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM logs WHERE user_id=? AND action='makevcf'", (user.id,))
+        files_made = c.fetchone()[0]
+        c.execute("SELECT timestamp FROM logs WHERE user_id=? ORDER BY timestamp DESC LIMIT 1", (user.id,))
+        last_action = c.fetchone()
+        last_action = last_action[0] if last_action else "N/A"
+    await update.message.reply_text(
+        f"📊 **Your Stats**\n\n"
+        f"👤 User: {user.username or user.id}\n"
+        f"📁 Files Created: {files_made}\n"
+        f"🕒 Last Activity: {last_action}"
+    )
 
 application.add_handler(CommandHandler("start", protected(start, "start")))
 application.add_handler(CommandHandler("setfilename", protected(set_filename, "setfilename")))
@@ -232,6 +285,7 @@ application.add_handler(CommandHandler("setvcfstart", protected(set_vcf_start, "
 application.add_handler(CommandHandler("makevcf", protected(make_vcf_command, "makevcf")))
 application.add_handler(CommandHandler("merge", protected(merge_command, "merge")))
 application.add_handler(CommandHandler("done", protected(done_merge, "done")))
+application.add_handler(CommandHandler("stats", protected(stats, "stats")))
 application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 application.add_handler(MessageHandler(filters.TEXT, handle_text))
 
@@ -239,8 +293,15 @@ application.add_handler(MessageHandler(filters.TEXT, handle_text))
 def run_flask():
     flask_app.run(host='0.0.0.0', port=8080)
 
+def run_bot():
+    try:
+        application.run_polling()
+    except Exception as e:
+        send_email("🚨 Bot Crashed!", f"Error details:\n{str(e)}")
+        raise
+
 if __name__ == "__main__":
     init_db()
     threading.Thread(target=run_flask).start()
-    application.run_polling()
+    run_bot()
     
