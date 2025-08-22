@@ -82,12 +82,30 @@ def home():
         logs = c.fetchall()
     return render_template_string("""
     <h2>✅ Telegram Bot Live</h2>
-    <p>🕒 Uptime: {{ uptime }}</p>
+    <p>🕒 Uptime: <span id="uptime">{{ uptime }}</span></p>
     <p>👥 Users: {{ users }} | 📁 Files: {{ files }}</p>
     <p><a href='/admin'>🔐 Admin Panel</a></p>
     <table border=1><tr><th>#</th><th>User</th><th>ID</th><th>Action</th><th>Time</th></tr>
     {% for row in logs %}<tr><td>{{ loop.index }}</td><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td><td>{{ row[3] }}</td></tr>{% endfor %}
     </table>
+
+    <script>
+    function toSeconds(str) {
+        let parts = str.split(\":\").map(Number);
+        return parts[0]*3600 + parts[1]*60 + parts[2];
+    }
+
+    let uptimeElem = document.getElementById("uptime");
+    let seconds = toSeconds(uptimeElem.innerText);
+
+    setInterval(() => {
+        seconds++;
+        let h = String(Math.floor(seconds/3600)).padStart(2,'0');
+        let m = String(Math.floor((seconds%3600)/60)).padStart(2,'0');
+        let s = String(seconds%60).padStart(2,'0');
+        uptimeElem.innerText = `${h}:${m}:${s}`;
+    }, 1000);
+    </script>
     """, uptime=uptime, users=total_users, files=total_files, logs=logs)
 
 # ========== Admin Panel ==========
@@ -225,6 +243,4 @@ if __name__ == "__main__":
     init_db()
     threading.Thread(target=run_flask).start()
     application.run_polling()
-
-
-                                        
+    
