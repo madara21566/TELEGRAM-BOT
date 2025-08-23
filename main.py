@@ -2,41 +2,19 @@ import os
 import threading
 import sqlite3
 import datetime
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import traceback
 from flask import Flask, render_template_string, request, redirect, session, send_file, jsonify
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from NIKALLLLLLL import (
     start, set_filename, set_contact_name, set_limit, set_start,
-    set_vcf_start, make_vcf_command, merge_command, done_merge,
-    handle_document, handle_text
+    set_vcf_start, set_country_code, set_group_number,
+    make_vcf_command, merge_command, done_merge,
+    handle_document, handle_text, OWNER_ID   # ✅ OWNER_ID import
 )
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
 SECRET_KEY = os.environ.get("FLASK_SECRET", "secretkey123")
-
-# Email config
-EMAIL_USER = os.environ.get("EMAIL_USER")
-EMAIL_PASS = os.environ.get("EMAIL_PASS")
-ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL")
-
-def send_email(subject, body):
-    try:
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_USER
-        msg['To'] = ADMIN_EMAIL
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'plain'))
-
-        server = smtplib.SMTP("smtp.gmail.com", 587)
-        server.starttls()
-        server.login(EMAIL_USER, EMAIL_PASS)
-        server.sendmail(EMAIL_USER, ADMIN_EMAIL, msg.as_string())
-        server.quit()
-    except Exception as e:
-        print("❌ Email error:", e)
 
 # ✅ MANUAL ACCESS CONTROL
 ALLOWED_USERS = [8047407478,7043391463,7440046924,7118726445,7492026653,5989680310,7440046924,7669357884,7640327597,5849097477,8128934569,7950732287,5989680310,7983528757,5564571047]
@@ -237,44 +215,28 @@ def logout():
 # ========== Telegram Bot ==========
 application = Application.builder().token(BOT_TOKEN).build()
 
+# ✅ ERROR HANDLER (same as NIKALLLLLLL.py)
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    error_text = "".join(traceback.format_exception(None, context.error, context.error.__traceback__))
+    with open("bot_errors.log", "a") as f:
+        f.write(f"{datetime.datetime.utcnow()} - {error_text}\n\n")
+    try:
+        await context.bot.send_message(
+            chat_id=OWNER_ID,
+            text=f"⚠️ Bot Error Alert ⚠️\n\n{error_text[:4000]}"
+        )
+    except Exception as e:
+        print("Failed to send error notification:", e)
+
 def protected(handler_func, command_name):
     async def wrapper(update, context):
         user = update.effective_user
         if not is_authorized(user.id):
-            await update.message.reply_text("❌ Sorry, you don’t have access to use this bot.\n\n👉 Contact admin to request access.")
-            send_email("🚨 Unauthorized Access Attempt", f"User @{user.username} ({user.id}) tried to access the bot.")
+            await update.message.reply_text("❌ You don't have access to use this bot.")
             return
-        # Temporary access expiry check
-        with sqlite3.connect(DB_FILE) as conn:
-            c = conn.cursor()
-            c.execute("SELECT type, expires_at FROM access WHERE user_id=?", (user.id,))
-            row = c.fetchone()
-            if row and row[0] == 'temporary' and row[1]:
-                expires = datetime.datetime.fromisoformat(row[1])
-                remaining = expires - datetime.datetime.now()
-                if remaining.total_seconds() < 3600:
-                    await update.message.reply_text(f"⚠️ Your temporary access will expire in {remaining}.")
-                    send_email("⚠️ Temporary Access Expiring", f"User @{user.username} ({user.id}) access expiring at {row[1]}.")
         log_action(user.id, user.username, command_name)
         return await handler_func(update, context)
     return wrapper
-
-# 📊 Stats Command
-async def stats(update, context):
-    user = update.effective_user
-    with sqlite3.connect(DB_FILE) as conn:
-        c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM logs WHERE user_id=? AND action='makevcf'", (user.id,))
-        files_made = c.fetchone()[0]
-        c.execute("SELECT timestamp FROM logs WHERE user_id=? ORDER BY timestamp DESC LIMIT 1", (user.id,))
-        last_action = c.fetchone()
-        last_action = last_action[0] if last_action else "N/A"
-    await update.message.reply_text(
-        f"📊 **Your Stats**\n\n"
-        f"👤 User: {user.username or user.id}\n"
-        f"📁 Files Created: {files_made}\n"
-        f"🕒 Last Activity: {last_action}"
-    )
 
 application.add_handler(CommandHandler("start", protected(start, "start")))
 application.add_handler(CommandHandler("setfilename", protected(set_filename, "setfilename")))
@@ -282,26 +244,28 @@ application.add_handler(CommandHandler("setcontactname", protected(set_contact_n
 application.add_handler(CommandHandler("setlimit", protected(set_limit, "setlimit")))
 application.add_handler(CommandHandler("setstart", protected(set_start, "setstart")))
 application.add_handler(CommandHandler("setvcfstart", protected(set_vcf_start, "setvcfstart")))
+application.add_handler(CommandHandler("setcountrycode", protected(set_country_code, "setcountrycode")))
+application.add_handler(CommandHandler("setgroup", protected(set_group_number, "setgroup")))
 application.add_handler(CommandHandler("makevcf", protected(make_vcf_command, "makevcf")))
 application.add_handler(CommandHandler("merge", protected(merge_command, "merge")))
 application.add_handler(CommandHandler("done", protected(done_merge, "done")))
-application.add_handler(CommandHandler("stats", protected(stats, "stats")))
 application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 application.add_handler(MessageHandler(filters.TEXT, handle_text))
+application.add_error_handler(error_handler)   # ✅ error notify
 
 # ========== Run ==========
 def run_flask():
-    flask_app.run(host='0.0.0.0', port=8080)
-
-def run_bot():
     try:
-        application.run_polling()
+        flask_app.run(host='0.0.0.0', port=8080)
     except Exception as e:
-        send_email("🚨 Bot Crashed!", f"Error details:\n{str(e)}")
-        raise
+        with open("bot_errors.log", "a") as f:
+            f.write(f"{datetime.datetime.utcnow()} - Flask Error: {e}\n")
+        # Flask crash notify
+        import telegram
+        bot = telegram.Bot(token=BOT_TOKEN)
+        bot.send_message(chat_id=OWNER_ID, text=f"⚠️ Flask Crash Alert ⚠️\n\n{str(e)}")
 
 if __name__ == "__main__":
     init_db()
     threading.Thread(target=run_flask).start()
-    run_bot()
-    
+    application.run_polling()
