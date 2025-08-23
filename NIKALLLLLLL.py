@@ -2,6 +2,7 @@ import os
 import re
 import pandas as pd
 from datetime import datetime
+import traceback
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -40,14 +41,33 @@ user_contact_names = {}
 user_limits = {}
 user_start_indexes = {}
 user_vcf_start_numbers = {}
+user_country_codes = {}   
+user_group_start_numbers = {}   # ✅ NEW
 merge_data = {}
 
+# ✅ ERROR HANDLER (Notification to owner)
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    error_text = "".join(traceback.format_exception(None, context.error, context.error.__traceback__))
+    with open("bot_errors.log", "a") as f:
+        f.write(f"{datetime.utcnow()} - {error_text}\n\n")
+    try:
+        await context.bot.send_message(
+            chat_id=OWNER_ID,
+            text=f"⚠️ Bot Error Alert ⚠️\n\n{error_text[:4000]}"
+        )
+    except Exception as e:
+        print("Failed to send error notification:", e)
+
 # VCF Generation
-def generate_vcf(numbers, filename="Contacts", contact_name="Contact", start_index=1):
+def generate_vcf(numbers, filename="Contacts", contact_name="Contact", start_index=1, country_code="", group_num=None):
     vcf_data = ""
     for i, num in enumerate(numbers, start=start_index):
-        name = f"{contact_name}{str(i).zfill(3)}"
-        vcf_data += f"BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nTEL;TYPE=CELL:{num}\nEND:VCARD\n"
+        if group_num:
+            name = f"{contact_name}{str(i).zfill(3)} (Group {group_num})"
+        else:
+            name = f"{contact_name}{str(i).zfill(3)}"
+        formatted_num = f"{country_code}{num}" if country_code else num
+        vcf_data += f"BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nTEL;TYPE=CELL:{formatted_num}\nEND:VCARD\n"
     with open(f"{filename}.vcf", "w") as f:
         f.write(vcf_data)
     return f"{filename}.vcf"
@@ -93,6 +113,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/setlimit [ PER VCF CONTACT ]\n"
         "/setstart [ CONTACT NUMBERING START ]\n"
         "/setvcfstart [ VCF NUMBERING START ]\n"
+        "/setcountrycode [ +91 / +1 / +44 ]\n"
+        "/setgroup [ START NUMBER ]\n"
         "/makevcf [ NAME 9876543210 ]\n"
         "/merge [ VCF NAME SET ]\n"
         "/done  [ AFTER FILE SET ]\n"
@@ -139,6 +161,24 @@ async def set_vcf_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_vcf_start_numbers[update.effective_user.id] = int(context.args[0])
         await update.message.reply_text(f"VCF numbering will start from {context.args[0]}.")
 
+async def set_country_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not has_access_level(update.effective_user.id, 1): return
+    if context.args:
+        code = context.args[0]
+        user_country_codes[update.effective_user.id] = code
+        await update.message.reply_text(f"✅ Country code set to: {code}")
+    else:
+        await update.message.reply_text("Usage: /setcountrycode +91")
+
+async def set_group_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not has_access_level(update.effective_user.id, 1): return
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Usage: /setgroup 5")
+        return
+    num = int(context.args[0])
+    user_group_start_numbers[update.effective_user.id] = num
+    await update.message.reply_text(f"✅ Group numbering will start from: {num}")
+
 async def make_vcf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not has_access_level(update.effective_user.id, 1): return
     if len(context.args) != 2:
@@ -148,9 +188,11 @@ async def make_vcf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not number.isdigit():
         await update.message.reply_text("Invalid phone number.")
         return
+    country_code = user_country_codes.get(update.effective_user.id, "")
     file_name = f"{name}.vcf"
     with open(file_name, "w") as f:
-        f.write(f"BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nTEL;TYPE=CELL:{number}\nEND:VCARD\n")
+        formatted_num = f"{country_code}{number}" if country_code else number
+        f.write(f"BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nTEL;TYPE=CELL:{formatted_num}\nEND:VCARD\n")
     await update.message.reply_document(document=open(file_name, "rb"))
     os.remove(file_name)
 
@@ -179,10 +221,12 @@ async def done_merge(update: Update, context: ContextTypes.DEFAULT_TYPE):
     output_path = f"{session['output_name']}.vcf"
     contact_name = user_contact_names.get(user_id, default_contact_name)
     start_index = user_start_indexes.get(user_id, default_start_index)
+    country_code = user_country_codes.get(user_id, "")
     vcf_data = ""
     for i, num in enumerate(sorted(session['numbers']), start=start_index):
         name = f"{contact_name}{str(i).zfill(3)}"
-        vcf_data += f"BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nTEL;TYPE=CELL:{num}\nEND:VCARD\n"
+        formatted_num = f"{country_code}{num}" if country_code else num
+        vcf_data += f"BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nTEL;TYPE=CELL:{formatted_num}\nEND:VCARD\n"
     with open(output_path, 'w') as f:
         f.write(vcf_data)
     await update.message.reply_document(document=open(output_path, 'rb'))
@@ -222,10 +266,11 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 with open(path, 'r', encoding='utf-8') as f:
                     content = f.read()
+                numbers = [''.join(filter(str.isdigit, w)) for w in content.split() if len(w) >=7]
             except UnicodeDecodeError:
                 with open(path, 'r', encoding='latin-1') as f:
                     content = f.read()
-            numbers = [''.join(filter(str.isdigit, w)) for w in content.split() if len(w) >=7]
+                numbers = [''.join(filter(str.isdigit, w)) for w in content.split() if len(w) >=7]
             df = pd.DataFrame({'Numbers': numbers})
         elif path.endswith('.vcf'):
             numbers = extract_numbers_from_vcf(path)
@@ -255,10 +300,22 @@ async def process_numbers(update, context, numbers):
     limit = user_limits.get(user_id, default_limit)
     start_index = user_start_indexes.get(user_id, default_start_index)
     vcf_num = user_vcf_start_numbers.get(user_id, default_vcf_start_number)
+    country_code = user_country_codes.get(user_id, "")
+    custom_group_start = user_group_start_numbers.get(user_id, 1)  # ✅ default 1
+
     numbers = list(dict.fromkeys([n.strip() for n in numbers if n.strip().isdigit()]))
     chunks = [numbers[i:i+limit] for i in range(0, len(numbers), limit)]
+
     for idx, chunk in enumerate(chunks):
-        file_path = generate_vcf(chunk, f"{file_base}_{vcf_num+idx}", contact_name, start_index+idx*limit)
+        group_num = custom_group_start + idx  # ✅ auto increment from custom start
+        file_path = generate_vcf(
+            chunk,
+            f"{file_base}_{vcf_num+idx}",
+            contact_name,
+            start_index+idx*limit,
+            country_code,
+            group_num
+        )
         await update.message.reply_document(document=open(file_path, "rb"))
         os.remove(file_path)
 
@@ -270,12 +327,12 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('setlimit', set_limit))
     app.add_handler(CommandHandler('setstart', set_start))
     app.add_handler(CommandHandler('setvcfstart', set_vcf_start))
+    app.add_handler(CommandHandler('setcountrycode', set_country_code))
+    app.add_handler(CommandHandler('setgroup', set_group_number))  # ✅ NEW
     app.add_handler(CommandHandler('makevcf', make_vcf_command))
     app.add_handler(CommandHandler('merge', merge_command))
     app.add_handler(CommandHandler('done', done_merge))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_error_handler(error_handler)
     app.run_polling()
-
-
-    
