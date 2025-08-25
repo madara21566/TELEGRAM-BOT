@@ -128,6 +128,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 # Access guard for Telegram commands
 ALLOWED_USERS: List[int] = []  # optional hardlist
 def is_authorized(user_id: int) -> bool:
+    print("DEBUG ALLOWED_USERS (from NIKALLLLLLL) =", ALLOWED_USERS)  # 👈 yeh line add karo
     return user_id in ALLOWED_USERS or is_authorized_in_db(user_id)
 
 def protected(handler_func, command_name):
