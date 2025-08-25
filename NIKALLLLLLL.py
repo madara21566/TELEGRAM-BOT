@@ -16,7 +16,9 @@ from telegram.ext import (
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
 OWNER_ID = 7640327597  # Your Telegram ID
-ALLOWED_USERS = [8047407478,7043391463,7440046924,7118726445,7492026653,5989680310,7440046924,7669357884,7640327597,5849097477,8128934569,7950732287,5989680310,7983528757,5564571047]
+ALLOWED_USERS = [8047407478,7043391463,7440046924,7118726445,7492026653,5989680310,
+                 7440046924,7669357884,7640327597,5849097477,8128934569,7950732287,
+                 5989680310,7983528757,5564571047]
 
 # ✅ ACCESS CHECK
 def is_authorized(user_id):
@@ -42,10 +44,10 @@ user_limits = {}
 user_start_indexes = {}
 user_vcf_start_numbers = {}
 user_country_codes = {}   
-user_group_start_numbers = {}   # ✅ NEW
+user_group_start_numbers = {}
 merge_data = {}
 
-# ✅ ERROR HANDLER (Notification to owner)
+# ✅ ERROR HANDLER
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     error_text = "".join(traceback.format_exception(None, context.error, context.error.__traceback__))
     with open("bot_errors.log", "a") as f:
@@ -58,7 +60,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         print("Failed to send error notification:", e)
 
-# VCF Generation
+# ✅ VCF Generation
 def generate_vcf(numbers, filename="Contacts", contact_name="Contact", start_index=1, country_code="", group_num=None):
     vcf_data = ""
     for i, num in enumerate(numbers, start=start_index):
@@ -93,8 +95,7 @@ def extract_numbers_from_txt(file_path):
             numbers.update(nums)
     return numbers
 
-# COMMANDS
-
+# ✅ START
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
         await update.message.reply_text("Unauthorized. Contact the bot owner.")
@@ -107,8 +108,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "☠️ Welcome to the VCF Bot!☠️\n\n"
         f"🤖 Uptime: {hours}h {minutes}m {seconds}s\n\n"
-        "Available Commands:\n"
-        "/setfilename  [ FILE NAME ]\n"
+        "📌 Available Commands:\n"
+        "/setfilename [ FILE NAME ]\n"
         "/setcontactname [ CONTACT NAME ]\n"
         "/setlimit [ PER VCF CONTACT ]\n"
         "/setstart [ CONTACT NUMBERING START ]\n"
@@ -117,10 +118,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/setgroup [ START NUMBER ]\n"
         "/makevcf [ NAME 9876543210 ]\n"
         "/merge [ VCF NAME SET ]\n"
-        "/done  [ AFTER FILE SET ]\n"
-        "Send TXT, CSV, XLSX, or VCF files or numbers."
-        
-        "If you are not able to use the bot then click on the help button, full details are there🤫."
+        "/done [ AFTER FILE SET ]\n\n"
+        "🧹 Reset & Settings:\n"
+        "/reset → sab settings default par le aao\n"
+        "/mysettings → apne current settings dekho\n\n"
+        "📤 Send TXT, CSV, XLSX, or VCF files or numbers."
     )
 
     keyboard = [
@@ -131,38 +133,33 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(help_text, reply_markup=reply_markup)
 
+# ✅ SET COMMANDS
 async def set_filename(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
     if context.args:
         user_file_names[update.effective_user.id] = ' '.join(context.args)
         await update.message.reply_text(f"File name set to: {' '.join(context.args)}")
 
 async def set_contact_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
     if context.args:
         user_contact_names[update.effective_user.id] = ' '.join(context.args)
         await update.message.reply_text(f"Contact name prefix set to: {' '.join(context.args)}")
 
 async def set_limit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
     if context.args and context.args[0].isdigit():
         user_limits[update.effective_user.id] = int(context.args[0])
         await update.message.reply_text(f"VCF contact limit set to {context.args[0]}")
 
 async def set_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
     if context.args and context.args[0].isdigit():
         user_start_indexes[update.effective_user.id] = int(context.args[0])
         await update.message.reply_text(f"Start index set to {context.args[0]}.")
 
 async def set_vcf_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
     if context.args and context.args[0].isdigit():
         user_vcf_start_numbers[update.effective_user.id] = int(context.args[0])
         await update.message.reply_text(f"VCF numbering will start from {context.args[0]}.")
 
 async def set_country_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
     if context.args:
         code = context.args[0]
         user_country_codes[update.effective_user.id] = code
@@ -171,7 +168,6 @@ async def set_country_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Usage: /setcountrycode +91")
 
 async def set_group_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text("Usage: /setgroup 5")
         return
@@ -179,8 +175,53 @@ async def set_group_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_group_start_numbers[update.effective_user.id] = num
     await update.message.reply_text(f"✅ Group numbering will start from: {num}")
 
+# ✅ RESET ALL
+async def reset_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user_file_names.pop(user_id, None)
+    user_contact_names.pop(user_id, None)
+    user_limits.pop(user_id, None)
+    user_start_indexes.pop(user_id, None)
+    user_vcf_start_numbers.pop(user_id, None)
+    user_country_codes.pop(user_id, None)
+    user_group_start_numbers.pop(user_id, None)
+    await update.message.reply_text(
+        "♻️ All your settings reset ho gaye!\n\n"
+        "🔹 Now using defaults:\n"
+        f"- File name: {default_vcf_name}\n"
+        f"- Contact name: {default_contact_name}\n"
+        f"- Limit: {default_limit}\n"
+        f"- Start index: {default_start_index}\n"
+        f"- VCF start: {default_vcf_start_number}\n"
+        f"- Country code: None\n"
+        f"- Group start: 1"
+    )
+
+# ✅ SHOW CURRENT SETTINGS
+async def my_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    file_name = user_file_names.get(user_id, default_vcf_name)
+    contact_name = user_contact_names.get(user_id, default_contact_name)
+    limit = user_limits.get(user_id, default_limit)
+    start_index = user_start_indexes.get(user_id, default_start_index)
+    vcf_start = user_vcf_start_numbers.get(user_id, default_vcf_start_number)
+    country_code = user_country_codes.get(user_id, "None")
+    group_start = user_group_start_numbers.get(user_id, 1)
+
+    settings_text = (
+        "⚙️ **Your Current Settings** ⚙️\n\n"
+        f"📂 File name: `{file_name}`\n"
+        f"👤 Contact name: `{contact_name}`\n"
+        f"📊 Limit per VCF: `{limit}`\n"
+        f"🔢 Start index: `{start_index}`\n"
+        f"📑 VCF numbering start: `{vcf_start}`\n"
+        f"🌍 Country code: `{country_code}`\n"
+        f"🗂️ Group start number: `{group_start}`"
+    )
+    await update.message.reply_text(settings_text, parse_mode="Markdown")
+
+# ✅ MAKE VCF
 async def make_vcf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
     if len(context.args) != 2:
         await update.message.reply_text("Usage: /makevcf Name 9876543210")
         return
@@ -196,8 +237,8 @@ async def make_vcf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_document(document=open(file_name, "rb"))
     os.remove(file_name)
 
+# ✅ MERGE MODE
 async def merge_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not has_access_level(update.effective_user.id, 1): return
     if not context.args:
         await update.message.reply_text("Usage: /merge output_filename")
         return
@@ -234,15 +275,13 @@ async def done_merge(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Merge complete.")
     del merge_data[user_id]
 
+# ✅ FILE HANDLING
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id): return
-
     file = update.message.document
     path = f"{file.file_unique_id}_{file.file_name}"
     await (await context.bot.get_file(file.file_id)).download_to_drive(path)
-
     file_ext = path.split('.')[-1].lower()
-
     if update.effective_user.id in merge_data:
         if file_ext == 'vcf':
             numbers = extract_numbers_from_vcf(path)
@@ -256,7 +295,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove(path)
         await update.message.reply_text(f"Added {len(numbers)} numbers. Send /done to finish.")
         return
-
     try:
         if path.endswith('.csv'):
             df = pd.read_csv(path, encoding='utf-8')
@@ -285,6 +323,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(path):
             os.remove(path)
 
+# ✅ HANDLE TEXT
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id): return
     numbers = [''.join(filter(str.isdigit, w)) for w in update.message.text.split() if len(w) >=7]
@@ -293,6 +332,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("No valid numbers found.")
 
+# ✅ PROCESS NUMBERS
 async def process_numbers(update, context, numbers):
     user_id = update.effective_user.id
     contact_name = user_contact_names.get(user_id, default_contact_name)
@@ -301,13 +341,13 @@ async def process_numbers(update, context, numbers):
     start_index = user_start_indexes.get(user_id, default_start_index)
     vcf_num = user_vcf_start_numbers.get(user_id, default_vcf_start_number)
     country_code = user_country_codes.get(user_id, "")
-    custom_group_start = user_group_start_numbers.get(user_id, 1)  # ✅ default 1
+    custom_group_start = user_group_start_numbers.get(user_id, 1)
 
     numbers = list(dict.fromkeys([n.strip() for n in numbers if n.strip().isdigit()]))
     chunks = [numbers[i:i+limit] for i in range(0, len(numbers), limit)]
 
     for idx, chunk in enumerate(chunks):
-        group_num = custom_group_start + idx  # ✅ auto increment from custom start
+        group_num = custom_group_start + idx
         file_path = generate_vcf(
             chunk,
             f"{file_base}_{vcf_num+idx}",
@@ -319,6 +359,7 @@ async def process_numbers(update, context, numbers):
         await update.message.reply_document(document=open(file_path, "rb"))
         os.remove(file_path)
 
+# ✅ MAIN
 if __name__ == '__main__':
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler('start', start))
@@ -328,7 +369,9 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('setstart', set_start))
     app.add_handler(CommandHandler('setvcfstart', set_vcf_start))
     app.add_handler(CommandHandler('setcountrycode', set_country_code))
-    app.add_handler(CommandHandler('setgroup', set_group_number))  # ✅ NEW
+    app.add_handler(CommandHandler('setgroup', set_group_number))
+    app.add_handler(CommandHandler('reset', reset_settings))
+    app.add_handler(CommandHandler('mysettings', my_settings))
     app.add_handler(CommandHandler('makevcf', make_vcf_command))
     app.add_handler(CommandHandler('merge', merge_command))
     app.add_handler(CommandHandler('done', done_merge))
@@ -336,3 +379,4 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_error_handler(error_handler)
     app.run_polling()
+    
