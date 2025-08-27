@@ -69,12 +69,15 @@ def generate_vcf(numbers, filename="Contacts", contact_name="Contact", start_ind
         else:
             name = f"{contact_name}{str(i).zfill(3)}"
         formatted_num = f"{country_code}{num}" if country_code else num
-        vcf_data += f"BEGIN:VCARD
-VERSION:3.0
-FN:{name}
-TEL;TYPE=CELL:{formatted_num}
-END:VCARD
-"
+        for number in numbers:
+    vcf_data += (
+        "BEGIN:VCARD\n"
+        "VERSION:3.0\n"
+        f"N:{contact_name}\n"
+        f"TEL;TYPE=CELL:{number}\n"
+        "END:VCARD\n"
+    )
+    
     with open(f"{filename}.vcf", "w") as f:
         f.write(vcf_data)
     return f"{filename}.vcf"
