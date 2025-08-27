@@ -1,4 +1,4 @@
-import NIKALLLLLLL
+import PAPA
 import os
 import io
 import threading
@@ -446,4 +446,392 @@ def admin_dashboard():
       </div>
     </div></body></html>
     """)
-  
+  # ---------- Admin: Live Logs ----------
+@flask_app.route('/admin/live-logs')
+@admin_required()
+def live_logs():
+    return render_template_string("""
+    <html><head><title>Live Logs</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head><body class="bg-dark text-light">
+    <div class="container py-3">
+      <h5>📺 Live Logs</h5>
+      <div id="logbox" class="table-responsive"></div>
+    </div>
+    <script>
+      async function refresh(){
+        const res = await fetch('/admin/log-feed'); const data = await res.json();
+        document.getElementById('logbox').innerHTML = `
+          <table class="table table-dark table-striped table-sm">
+            <thead><tr><th>#</th><th>User</th><th>ID</th><th>Action</th><th>Time</th></tr></thead>
+            <tbody>${data.map((r,i)=>`<tr><td>${i+1}</td><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}</tbody>
+          </table>`;
+      }
+      refresh(); setInterval(refresh, 3000);
+    </script>
+    </body></html>
+    """)
+
+@flask_app.route('/admin/log-feed')
+@admin_required()
+def log_feed():
+    with sqlite3.connect(DB_FILE) as conn:
+        c = conn.cursor()
+        c.execute("SELECT username, user_id, action, timestamp FROM logs ORDER BY timestamp DESC LIMIT 100")
+        return jsonify(c.fetchall())
+        # ---------- Admin: Logs with Filters ----------
+@flask_app.route('/admin/logs')
+@admin_required()
+def logs_filter():
+    date_from = request.args.get('from')
+    date_to = request.args.get('to')
+    user_q = request.args.get('user')
+    action_q = request.args.get('action')
+
+    query = "SELECT username, user_id, action, timestamp FROM logs WHERE 1=1"
+    params: List[str] = []
+    if date_from:
+        query += " AND date(timestamp) >= date(?)"; params.append(date_from)
+    if date_to:
+        query += " AND date(timestamp) <= date(?)"; params.append(date_to)
+    if user_q:
+        query += " AND (username LIKE ? OR user_id=?)"; params.extend([f"%{user_q}%", user_q if user_q.isdigit() else -1])
+    if action_q:
+        query += " AND action LIKE ?"; params.append(f"%{action_q}%")
+    query += " ORDER BY timestamp DESC LIMIT 500"
+
+    with sqlite3.connect(DB_FILE) as conn:
+        c = conn.cursor()
+        c.execute(query, tuple(params))
+        rows = c.fetchall()
+        return render_template_string("""
+    <html><head><title>Logs</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head><body class="bg-dark text-light">
+    <div class="container py-3">
+      <h5>🔎 Logs (Filter)</h5>
+      <form class="row g-2 mb-3">
+        <div class="col-md-2"><input class="form-control" type="date" name="from" value="{{request.args.get('from','')}}"></div>
+        <div class="col-md-2"><input class="form-control" type="date" name="to" value="{{request.args.get('to','')}}"></div>
+        <div class="col-md-3"><input class="form-control" name="user" placeholder="username or user_id" value="{{request.args.get('user','')}}"></div>
+        <div class="col-md-3"><input class="form-control" name="action" placeholder="action" value="{{request.args.get('action','')}}"></div>
+        <div class="col-md-2 d-grid"><button class="btn btn-primary">Search</button></div>
+      </form>
+        <div class="table-responsive">
+        <table class="table table-dark table-striped table-sm">
+          <thead><tr><th>#</th><th>User</th><th>ID</th><th>Action</th><th>Time</th></tr></thead>
+          <tbody>
+            {% for r in rows %}
+              <tr><td>{{loop.index}}</td><td>{{r[0]}}</td><td>{{r[1]}}</td><td>{{r[2]}}</td><td>{{r[3]}}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <a class="btn btn-outline-danger" href="/admin/clear-logs" onclick="return confirm('Delete ALL logs?')">🗑 Clear All Logs</a>
+    </div></body></html>
+    """, rows=rows)
+
+@flask_app.route('/admin/clear-logs')
+@admin_required(roles=["owner"])
+def clear_logs():
+    with sqlite3.connect(DB_FILE) as conn:
+        c = conn.cursor()
+        c.execute("DELETE FROM logs")
+        conn.commit()
+    return redirect('/admin/logs')
+    @flask_app.route('/admin/access', methods=['GET', 'POST'])
+@admin_required(roles=["owner","editor"])
+def access_panel():
+    msg = ""
+    if request.method == 'POST':
+        uid = request.form['user_id']
+        uname = request.form['username']
+        atype = request.form['type']
+        expires_at = None
+        if atype == 'temporary':
+            exp = parse_duration(request.form.get('duration', ''))
+            if exp: expires_at = exp.strftime('%Y-%m-%d %H:%M:%S')
+        with sqlite3.connect(DB_FILE) as conn:
+            c = conn.cursor()
+            # store user_id as string consistently
+            c.execute("INSERT OR REPLACE INTO access (user_id, username, type, expires_at) VALUES (?, ?, ?, ?)",
+                      (str(uid), uname, atype, expires_at))
+            conn.commit()
+        # Notify user on Telegram (best-effort)
+        try:
+            tg_bot.send_message(chat_id=int(uid), text=f"✅ You have been granted *{atype}* access to the bot.", parse_mode="Markdown")
+        except Exception:
+            pass
+        msg = "✅ Access granted!"
+    with sqlite3.connect(DB_FILE) as conn:
+        c = conn.cursor()
+        c.execute("""
+            DELETE FROM access
+            WHERE type='temporary' AND expires_at IS NOT NULL AND datetime(expires_at) < datetime(?)
+        """, (datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),))
+        c.execute("SELECT * FROM access ORDER BY type DESC, user_id ASC")
+        rows = c.fetchall()
+    return render_template_string("""
+    <html><head><title>Access Control</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head><body class="bg-dark text-light">
+    <div class="container py-3">
+      <h5>🔐 Manage Access</h5>
+      {% if msg %}<div class="alert alert-success py-2">{{msg}}</div>{% endif %}
+      <form method="post" class="row g-2 mb-3">
+        <div class="col-md-2"><input class="form-control" name="user_id" placeholder="User ID" required></div>
+        <div class="col-md-3"><input class="form-control" name="username" placeholder="Username"></div>
+        <div class="col-md-3">
+          <select class="form-select" name="type">
+            <option value="permanent">Permanent</option>
+            <option value="temporary">Temporary</option>
+          </select>
+        </div>
+        <div class="col-md-2"><input class="form-control" name="duration" placeholder="e.g. 2h or 3d"></div>
+        <div class="col-md-2 d-grid"><button class="btn btn-primary">Add / Update</button></div>
+      </form>
+      <div class="table-responsive">
+        <table class="table table-dark table-striped table-sm">
+          <thead><tr><th>User ID</th><th>Username</th><th>Type</th><th>Expires</th><th>Delete</th></tr></thead>
+          <tbody>
+            {% for r in rows %}
+              <tr><td>{{r[0]}}</td><td>{{r[1]}}</td><td>{{r[2]}}</td><td>{{r[3] or '∞'}}</td>
+              <td><a class="btn btn-sm btn-danger" href="/admin/delaccess?uid={{r[0]}}">❌</a></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div></body></html>
+    """, rows=rows, msg=msg)
+    @flask_app.route('/admin/delaccess')
+@admin_required(roles=["owner","editor"])
+def del_access():
+    uid = request.args.get('uid')
+    with sqlite3.connect(DB_FILE) as conn:
+        c = conn.cursor()
+        # delete using string param
+        c.execute("DELETE FROM access WHERE user_id=?", (str(uid),))
+        conn.commit()
+    return redirect('/admin/access')
+
+# ---------- Admin: Broadcast ----------
+@flask_app.route('/admin/broadcast', methods=['GET', 'POST'])
+@admin_required(roles=["owner","editor"])
+def broadcast():
+    note = None
+    if request.method == 'POST':
+        kind = request.form.get('kind', 'text')
+        text = request.form.get('text', '')
+        file = request.files.get('file')
+
+        # audience = distinct user_ids who used the bot or have access
+        with sqlite3.connect(DB_FILE) as conn:
+            c = conn.cursor()
+            c.execute("SELECT DISTINCT user_id FROM logs")
+            ids1 = {r[0] for r in c.fetchall()}
+            c.execute("SELECT DISTINCT user_id FROM access")
+            ids2 = {r[0] for r in c.fetchall()}
+        audience = sorted(list(ids1.union(ids2)))
+
+        # Run sending in background thread to avoid blocking the request
+        threading.Thread(target=send_broadcast, args=(audience, kind, text, file), daemon=True).start()
+
+        with sqlite3.connect(DB_FILE) as conn:
+            c = conn.cursor()
+            c.execute("INSERT INTO broadcasts (admin, kind, content, created_at) VALUES (?, ?, ?, ?)",
+                      (session.get("admin_user"), kind, text if kind=='text' else (file.filename if file else ''),
+                       datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+            conn.commit()
+        note = f"📢 Broadcast started for {len(audience)} users. Sending in background."
+    with sqlite3.connect(DB_FILE) as conn:
+        c = conn.cursor()
+        c.execute("SELECT id, admin, kind, content, created_at FROM broadcasts ORDER BY id DESC LIMIT 50")
+        hist = c.fetchall()
+        return render_template_string("""
+    <html><head><title>Broadcast</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head><body class="bg-dark text-light">
+    <div class="container py-3">
+      <h5>📢 Broadcast</h5>
+      {% if note %}<div class="alert alert-success py-2">{{note}}</div>{% endif %}
+      <form method="post" enctype="multipart/form-data" class="row g-2 mb-3">
+        <div class="col-md-2">
+          <select class="form-select" name="kind">
+            <option value="text">Text</option>
+            <option value="photo">Photo</option>
+            <option value="document">Document</option>
+          </select>
+        </div>
+        <div class="col-md-6"><input class="form-control" name="text" placeholder="Message (optional for photo/document)"></div>
+        <div class="col-md-3"><input class="form-control" type="file" name="file"></div>
+        <div class="col-md-1 d-grid"><button class="btn btn-success">Send</button></div>
+      </form>
+      <h6>History</h6>
+      <div class="table-responsive"><table class="table table-dark table-striped table-sm">
+        <thead><tr><th>ID</th><th>Admin</th><th>Kind</th><th>Content</th><th>Time</th></tr></thead>
+        <tbody>
+          {% for r in hist %}<tr><td>{{r[0]}}</td><td>{{r[1]}}</td><td>{{r[2]}}</td><td>{{r[3][:60]}}</td><td>{{r[4]}}</td></tr>{% endfor %}
+        </tbody></table></div>
+    </div></body></html>
+    """, note=note, hist=hist)
+
+# ---------- Admin: Errors ----------
+@flask_app.route('/admin/errors')
+@admin_required()
+def errors_page():
+    lines = []
+    if os.path.exists(ERROR_LOG):
+        try:
+            with open(ERROR_LOG, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()[-500:]
+        except Exception as e:
+            lines = [f"(error reading log: {e})"]
+    return render_template_string("""
+    <html><head><title>Errors</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head><body class="bg-dark text-light">
+    <div class="container py-3">
+      <h5>⚠️ Errors</h5>
+      <div class="mb-2">
+        <a class="btn btn-sm btn-outline-danger" href="/admin/errors/clear" onclick="return confirm('Clear error log?')">Clear Errors</a>
+        <a class="btn btn-sm btn-outline-light" href="/admin/errors/download">Download</a>
+      </div>
+      <pre style="max-height:70vh;overflow:auto;background:#0f172a;color:#fca5a5">{{lines|join('')}}</pre>
+    </div></body></html>
+    """, lines=lines)
+
+@flask_app.route('/admin/errors/clear')
+@admin_required(roles=["owner","editor"])
+def errors_clear():
+    if os.path.exists(ERROR_LOG):
+        try:
+            open(ERROR_LOG, "w").close()
+        except Exception:
+            pass
+    return redirect('/admin/errors')
+
+@flask_app.route('/admin/errors/download')
+@admin_required()
+def errors_download():
+    data = ""
+    if os.path.exists(ERROR_LOG):
+        with open(ERROR_LOG, "r", encoding="utf-8", errors="ignore") as f:
+            data = f.read()
+    return send_file(io.BytesIO(data.encode('utf-8')), as_attachment=True, download_name="bot_errors.log", mimetype="text/plain")
+
+# ---------- Admin: Admins Management (multi-admin) ----------
+@flask_app.route('/admin/admins', methods=['GET', 'POST'])
+@admin_required(roles=["owner"])
+def admins_panel():
+    note = None
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add':
+            uname = request.form.get('username').strip()
+            pwd = request.form.get('password')
+            role = request.form.get('role', 'editor')
+            with sqlite3.connect(DB_FILE) as conn:
+                c = conn.cursor()
+                try:
+                    c.execute("INSERT INTO admins (username, password_hash, role) VALUES (?, ?, ?)",
+                              (uname, generate_password_hash(pwd), role))
+                    conn.commit()
+                    note = "✅ Admin added"
+                except sqlite3.IntegrityError:
+                    note = "❌ Username already exists"
+        elif action == 'del':
+            uname = request.form.get('username')
+            if uname == 'owner':
+                note = "❌ Cannot delete default owner"
+            else:
+                with sqlite3.connect(DB_FILE) as conn:
+                    c = conn.cursor()
+                    c.execute("DELETE FROM admins WHERE username=?", (uname,))
+                    conn.commit()
+                    note = "✅ Admin removed"
+    with sqlite3.connect(DB_FILE) as conn:
+        c = conn.cursor()
+        c.execute("SELECT username, role FROM admins ORDER BY role DESC, username ASC")
+        rows = c.fetchall()
+    return render_template_string("""
+    <html><head><title>Admins</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head><body class="bg-dark text-light">
+    <div class="container py-3">
+      <h5>👤 Admins (Owner only)</h5>
+      {% if note %}<div class="alert alert-info py-2">{{note}}</div>{% endif %}
+      <form method="post" class="row g-2 mb-3">
+        <input type="hidden" name="action" value="add">
+        <div class="col-md-3"><input class="form-control" name="username" placeholder="username" required></div>
+        <div class="col-md-3"><input class="form-control" name="password" type="password" placeholder="password" required></div>
+        <div class="col-md-3">
+          <select class="form-select" name="role">
+            <option value="editor">editor</option>
+            <option value="viewer">viewer</option>
+            <option value="owner">owner</option>
+          </select>
+        </div>
+        <div class="col-md-3 d-grid"><button class="btn btn.success">Add Admin</button></div>
+      </form>
+      <div class="table-responsive">
+        <table class="table table-dark table-striped table-sm">
+          <thead><tr><th>Username</th><th>Role</th><th>Delete</th></tr></thead>
+          <tbody>
+            {% for r in rows %}
+              <tr><td>{{r[0]}}</td><td>{{r[1]}}</td>
+              <td>
+                <form method="post" style="display:inline" onsubmit="return confirm('Delete admin {{r[0]}}?')">
+                  <input type="hidden" name="action" value="del">
+                  <input type="hidden" name="username" value="{{r[0]}}">
+                  <button class="btn btn-sm btn-danger" {% if r[0]=='owner' %}disabled{% endif %}>❌</button>
+                </form>
+              </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div></body></html>
+    """, rows=rows, note=note)
+    # ---------- Flask APIs used above ----------
+@flask_app.route('/api/errors-tail')
+def api_errors_tail():
+    lines = []
+    try:
+        if os.path.exists(ERROR_LOG):
+            with open(ERROR_LOG, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()[-12:]
+    except Exception as e:
+        lines = [f"(error reading log: {e})"]
+    return jsonify(lines)
+
+# ================== WEBHOOK / RUN ==================
+@flask_app.route("/webhook", methods=["POST"])
+def webhook():
+    update = request.get_json(force=True)
+    # For compatibility, put json into bot queue – main polling is used in this deployment pattern
+    try:
+        application.update_queue.put_nowait(update)
+    except Exception:
+        pass
+    return "ok"
+
+# ================== RUN helpers ==================
+def run_flask():
+    try:
+        flask_app.run(host='0.0.0.0', port=APP_PORT)
+    except Exception as e:
+        try:
+            with open(ERROR_LOG, "a", encoding="utf-8") as f:
+                f.write(f"{datetime.datetime.utcnow()} - Flask Error: {e}\n")
+        except Exception:
+            pass
+        try:
+            tg_bot.send_message(chat_id=OWNER_ID, text=f"⚠️ Flask Crash Alert ⚠️\n\n{str(e)}")
+        except Exception:
+            pass
+
+if __name__ == "__main__":
+    init_db()
+    # start flask in a background thread, then start bot polling (keeps UI + bot alive)
+    threading.Thread(target=run_flask, daemon=True).start()
+    application.run_polling()
