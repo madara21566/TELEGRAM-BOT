@@ -540,8 +540,9 @@ def clear_logs():
         conn.commit()
     return redirect('/admin/logs')
     @flask_app.route('/admin/access', methods=['GET', 'POST'])
-@admin_required(roles=["owner","editor"])
-def access_panel():
+@admin_required(roles=["owner", "editor"])
+async def broadcast_handler(message: types.Message):
+    # code here
     msg = ""
     if request.method == 'POST':
         uid = request.form['user_id']
