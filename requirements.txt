@@ -15,3 +15,9 @@ pandas
 openpyxl
 xlrd
 werkzeug
+Flask
+phonenumbers
+vobject
+aiofiles
+python-dotenv
+aiogram==3.*
