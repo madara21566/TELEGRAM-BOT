@@ -6,6 +6,10 @@ import sqlite3
 import datetime
 import traceback
 from typing import Optional, List, Tuple
+
+# ===== UPTIME FIX =====
+start_time = datetime.datetime.now()
+
 def format_uptime():
     delta = datetime.datetime.now() - start_time
     days = delta.days
@@ -15,8 +19,7 @@ def format_uptime():
         return f"{days}d {hours:02}:{minutes:02}:{seconds:02}"
     else:
         return f"{hours:02}:{minutes:02}:{seconds:02}"
-
-
+        
 from flask import (
     Flask, render_template_string, request, redirect, session, jsonify, send_file, url_for
 )
