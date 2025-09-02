@@ -1,5 +1,4 @@
 flask 
-python-telegram-bot==20.0a4 
 psutil
 Flask
 gunicorn
