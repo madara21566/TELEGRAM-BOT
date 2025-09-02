@@ -1,4 +1,6 @@
-pip install flask python-telegram-bot==20.0a4 psutil
+flask 
+python-telegram-bot==20.0a4 
+psutil
 Flask
 gunicorn
 aiohttp
