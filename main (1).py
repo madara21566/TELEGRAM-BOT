@@ -68,7 +68,7 @@ from NIKALLLLLLL import (
     start, set_filename, set_contact_name, set_limit, set_start,
     set_vcf_start, set_country_code, set_group_number,
     make_vcf_command, merge_command, done_merge,
-    handle_document, handle_text, OWNER_ID, ALLOWED_USERS, reset_settings, my_settings
+    handle_document, handle_text, OWNER_ID, ALLOWED_USERS, reset_settings, my_settings,txt2vcf, vcf2txt, rename_file, rename_contact
 )
 
 # ============ TELEGRAM BOT SETUP ============
