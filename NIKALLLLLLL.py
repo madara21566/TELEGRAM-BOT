@@ -134,10 +134,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/makevcf [ NAME 9876543210 9876543211 ... ]\n"
         "/merge [ VCF NAME SET ]\n"
         "/done [ AFTER FILE SET ]\n"
-        "/txt2vcf → Convert TXT file to VCF\n"
-        "/vcf2txt → Convert VCF file to TXT\n"
-        "/renamefile [NAME] → Rename output file\n"
-        "/renamecontact [NAME] → Rename contact prefix\n\n"
+        "/txt2vcf → [ Convert TXT file to VCF ]\n"
+        "/vcf2txt → [ Convert VCF file to TXT ]\n"
+        "/renamefile [ NAME ] → Rename output file\n"
+        "/renamecontact [ NAME ] → Rename contact prefix\n\n"
         "🧹 Reset & Settings:\n"
         "/reset → sab settings default par le aao\n"
         "/mysettings → apne current settings dekho\n\n"
@@ -146,7 +146,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [InlineKeyboardButton("Help 📖", url="https://t.me/GODMADARAVCFMAKER")],
-        [InlineKeyboardButton("Bot status 👁️‍🗨️", url="https://telegram-bot-z3zl.onrender.com/")]
+        [InlineKeyboardButton("Bot status 👁️‍🗨️", url="https://telegram-bot-1-mwer.onrender.com/")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
