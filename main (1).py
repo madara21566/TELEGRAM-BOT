@@ -64,12 +64,15 @@ def log_action(user_id: int, username: Optional[str], action: str):
 
 # ============ Import handlers from NIKALLLLLLL (user's bot logic) ============
 # Ensure NIKALLLLLLL provides the functions and constants below
-from NIKALLLLLLL import (
+    from NIKALLLLLLL import (
     start, set_filename, set_contact_name, set_limit, set_start,
     set_vcf_start, set_country_code, set_group_number,
     make_vcf_command, merge_command, done_merge,
-    handle_document, handle_text, OWNER_ID, ALLOWED_USERS, reset_settings, my_settings
+    handle_document, handle_text, OWNER_ID, ALLOWED_USERS,
+    reset_settings, my_settings,
+    txt2vcf, vcf2txt, rename_file, rename_contact   # 🔥 नए features
 )
+
 
 # ============ TELEGRAM BOT SETUP ============
 if not BOT_TOKEN:
@@ -141,6 +144,10 @@ if application:
     application.add_handler(CommandHandler("setgroup",       protected(set_group_number, "setgroup")))
     application.add_handler(CommandHandler("makevcf",        protected(make_vcf_command, "makevcf")))
     application.add_handler(CommandHandler("merge",          protected(merge_command, "merge")))
+    application.add_handler(CommandHandler("txt2vcf",        protected(txt2vcf, "txt2vcf")))
+    application.add_handler(CommandHandler("vcf2txt",        protected(vcf2txt, "vcf2txt")))
+    application.add_handler(CommandHandler("renamefile",     protected(rename_file, "renamefile")))
+    application.add_handler(CommandHandler("renamecontact",  protected(rename_contact, "renamecontact")))
     application.add_handler(CommandHandler("done",           protected(done_merge, "done")))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
