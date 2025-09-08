@@ -43,12 +43,26 @@ conversion_mode = {}  # 🔥 for txt2vcf / vcf2txt
 
 # ✅ Universal Cleaner
 def clean_number(number: str, country_code: str = "") -> str:
+    # Remove all non-digits
     num = re.sub(r'\D', '', number)
-    if country_code:
-        if num.startswith(country_code):
-            return num
-        if len(num) == 10:
-            return country_code + num
+
+    # If no country code set → just return digits
+    if not country_code:
+        return num
+
+    # If number already starts with country code → keep it
+    if num.startswith(country_code):
+        return num
+
+    # If number starts with '0' and length matches → remove 0 and add country code
+    if num.startswith("0") and len(num) == len(country_code) + 10:
+        return country_code + num[1:]
+
+    # If number is 10 digits → assume it's local and add country code
+    if len(num) == 10:
+        return country_code + num
+
+    # Otherwise return as-is
     return num
 
 # ✅ ERROR HANDLER
@@ -345,8 +359,6 @@ async def make_vcf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ✅ MERGE
 async def merge_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id
-async def merge_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     merge_data[user_id] = []
     await update.message.reply_text("📂 Send me files to merge. When done, use /done.")
@@ -402,3 +414,4 @@ if __name__ == "__main__":
 
     print("🚀 Bot is running...")
     app.run_polling()
+                 
