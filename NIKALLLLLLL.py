@@ -43,26 +43,15 @@ conversion_mode = {}  # 🔥 for txt2vcf / vcf2txt
 
 # ✅ Universal Cleaner
 def clean_number(number: str, country_code: str = "") -> str:
-    # Remove all non-digits
     num = re.sub(r'\D', '', number)
-
-    # If no country code set → just return digits
     if not country_code:
         return num
-
-    # If number already starts with country code → keep it
     if num.startswith(country_code):
         return num
-
-    # If number starts with '0' and length matches → remove 0 and add country code
     if num.startswith("0") and len(num) == len(country_code) + 10:
         return country_code + num[1:]
-
-    # If number is 10 digits → assume it's local and add country code
     if len(num) == 10:
         return country_code + num
-
-    # Otherwise return as-is
     return num
 
 # ✅ ERROR HANDLER
@@ -123,20 +112,6 @@ async def vcf2txt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conversion_mode[update.effective_user.id] = "vcf2txt"
     await update.message.reply_text("📂 Send me a VCF file, I’ll extract numbers into TXT.")
 
-async def rename_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.args:
-        user_file_names[update.effective_user.id] = ' '.join(context.args)
-        await update.message.reply_text(f"✅ File renamed to: {' '.join(context.args)}")
-    else:
-        await update.message.reply_text("Usage: /renamefile newfilename")
-
-async def rename_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.args:
-        user_contact_names[update.effective_user.id] = ' '.join(context.args)
-        await update.message.reply_text(f"✅ Contact name prefix changed to: {' '.join(context.args)}")
-    else:
-        await update.message.reply_text("Usage: /renamecontact newcontactname")
-
 # ✅ START
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
@@ -163,9 +138,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/merge [ VCF NAME SET ]\n"
         "/done [ AFTER FILE SET ]\n"
         "/txt2vcf → [ Convert TXT file to VCF ]\n"
-        "/vcf2txt → [ Convert VCF file to TXT ]\n"
-        "/renamefile [ NAME ] → Rename output file\n"
-        "/renamecontact [ NAME ] → Rename contact prefix\n\n"
+        "/vcf2txt → [ Convert VCF file to TXT ]\n\n"
         "🧹 Reset & Settings:\n"
         "/reset → sab settings default par le aao\n"
         "/mysettings → apne current settings dekho\n\n"
@@ -373,15 +346,7 @@ async def done_merge(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if file_path.endswith(".vcf"):
             all_numbers.update(extract_numbers_from_vcf(file_path))
         elif file_path.endswith(".txt"):
-            all_numbers.update(extract_numbers_from_txt(file_path))
-    vcf_path = generate_vcf(list(all_numbers), "Merged")
-    await update.message.reply_document(document=open(vcf_path, "rb"))
-    os.remove(vcf_path)
-    for file_path in merge_data[user_id]:
-        if os.path.exists(file_path): os.remove(file_path)
-    merge_data[user_id] = []
-    await update.message.reply_text("✅ Merge completed.")
-
+    
 # ✅ MAIN
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -400,14 +365,8 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("makevcf", make_vcf_command))
     app.add_handler(CommandHandler("merge", merge_command))
     app.add_handler(CommandHandler("done", done_merge))
-
-    # ✅ New commands
     app.add_handler(CommandHandler("txt2vcf", txt2vcf))
     app.add_handler(CommandHandler("vcf2txt", vcf2txt))
-    app.add_handler(CommandHandler("renamefile", rename_file))
-    app.add_handler(CommandHandler("renamecontact", rename_contact))
-
-    # Handlers
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_error_handler(error_handler)
