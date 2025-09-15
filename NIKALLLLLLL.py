@@ -341,9 +341,9 @@ async def make_vcf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     country_code = user_country_codes.get(user_id, "")
 
     contact_name = context.args[0]
-    numbers = context.args[1:]
+    raw_numbers = context.args[1:]
 
-    cleaned_numbers = [clean_number(num, country_code) for num in numbers]
+    cleaned_numbers = [clean_number(num, country_code) for num in raw_numbers if num.strip()]
 
     vcf_file = generate_vcf(cleaned_numbers, filename=contact_name, contact_name=contact_name, country_code=country_code)
     await update.message.reply_document(document=vcf_file, filename=f"{contact_name}.vcf")
@@ -371,7 +371,7 @@ async def done_merge(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(file_path): os.remove(file_path)
     merge_data[user_id] = []
     await update.message.reply_text("✅ Merge completed.")
-
+    
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
