@@ -95,20 +95,6 @@ async def vcf2txt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conversion_mode[update.effective_user.id] = "vcf2txt"
     await update.message.reply_text("📂 Send me a VCF file, I’ll extract numbers into TXT.")
 
-async def rename_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.args:
-        user_file_names[update.effective_user.id] = ' '.join(context.args)
-        await update.message.reply_text(f"✅ File renamed to: {' '.join(context.args)}")
-    else:
-        await update.message.reply_text("Usage: /renamefile newfilename")
-
-async def rename_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.args:
-        user_contact_names[update.effective_user.id] = ' '.join(context.args)
-        await update.message.reply_text(f"✅ Contact name prefix changed to: {' '.join(context.args)}")
-    else:
-        await update.message.reply_text("Usage: /renamecontact newcontactname")
-
 # ✅ START
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
@@ -135,9 +121,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/merge [ VCF NAME SET ]\n"
         "/done [ AFTER FILE SET ]\n"
         "/txt2vcf → [ Convert TXT file to VCF ]\n"
-        "/vcf2txt → [ Convert VCF file to TXT ]\n"
-        "/renamefile [ NAME ] → Rename output file\n"
-        "/renamecontact [ NAME ] → Rename contact prefix\n\n"
+        "/vcf2txt → [ Convert VCF file to TXT ]\n\n"
         "🧹 Reset & Settings:\n"
         "/reset → sab settings default par le aao\n"
         "/mysettings → apne current settings dekho\n\n"
@@ -160,7 +144,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await (await context.bot.get_file(file.file_id)).download_to_drive(path)
     user_id = update.effective_user.id
 
-    # conversion modes
+    # ✅ If user is merging files
+    if user_id in merge_data:
+        merge_data[user_id].append(path)
+        await update.message.reply_text(f"📥 File added for merge: {file.file_name}")
+        return
+
+    # ✅ conversion modes
     if user_id in conversion_mode:
         mode = conversion_mode[user_id]
         if mode == "txt2vcf" and path.endswith(".txt"):
@@ -316,9 +306,13 @@ async def make_vcf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 2:
         await update.message.reply_text("Usage: /makevcf Name number1 number2 ...")
         return
+    
     contact_name = context.args[0]
     numbers = context.args[1:]
-    file_path = generate_vcf(numbers, "Generated", contact_name)
+    
+    # File name और contact prefix दोनों same रखे
+    file_path = generate_vcf(numbers, contact_name, contact_name)
+    
     await update.message.reply_document(document=open(file_path, "rb"))
     os.remove(file_path)
 
@@ -369,8 +363,6 @@ if __name__ == "__main__":
     # ✅ New commands
     app.add_handler(CommandHandler("txt2vcf", txt2vcf))
     app.add_handler(CommandHandler("vcf2txt", vcf2txt))
-    app.add_handler(CommandHandler("renamefile", rename_file))
-    app.add_handler(CommandHandler("renamecontact", rename_contact))
 
     # Handlers
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
@@ -379,3 +371,4 @@ if __name__ == "__main__":
 
     print("🚀 Bot is running...")
     app.run_polling()
+    
