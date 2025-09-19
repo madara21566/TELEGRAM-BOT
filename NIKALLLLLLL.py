@@ -16,9 +16,11 @@ from telegram.ext import (
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
 OWNER_ID = 7640327597  # Your Telegram ID
-ALLOWED_USERS = [8047407478,7043391463,7440046924,7118726445,7492026653,5989680310,
-                 7440046924,7669357884,7640327597,5849097477,8128934569,7950732287,
-                 5989680310,7983528757,5564571047,8171988129,7770325695,7856502907]
+ALLOWED_USERS = [
+    8047407478,7043391463,7440046924,7118726445,7492026653,5989680310,
+    7440046924,7669357884,7640327597,5849097477,8128934569,7950732287,
+    5989680310,7983528757,5564571047,8171988129,7770325695,7856502907
+]
 
 def is_authorized(user_id):
     return user_id in ALLOWED_USERS
@@ -138,7 +140,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ✅ FILE HANDLER
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update.effective_user.id): return
+    if not is_authorized(update.effective_user.id):
+        await update.message.reply_text("❌ You don't have access to use this bot.")
+        return
+
     file = update.message.document
     path = f"{file.file_unique_id}_{file.file_name}"
     await (await context.bot.get_file(file.file_id)).download_to_drive(path)
@@ -150,18 +155,18 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"📥 File added for merge: {file.file_name}")
         return
 
-    # ✅ conversion modes
+    # ✅ Conversion modes
     if user_id in conversion_mode:
         mode = conversion_mode[user_id]
+
         if mode == "txt2vcf" and path.endswith(".txt"):
             numbers = extract_numbers_from_txt(path)
             if numbers:
-                vcf_path = generate_vcf(list(numbers), "Converted")
+                vcf_path = generate_vcf(list(numbers), "Converted", "Contact")
                 await update.message.reply_document(document=open(vcf_path, "rb"))
                 os.remove(vcf_path)
             else:
                 await update.message.reply_text("❌ No numbers found in TXT file.")
-            conversion_mode.pop(user_id, None)
 
         elif mode == "vcf2txt" and path.endswith(".vcf"):
             numbers = extract_numbers_from_vcf(path)
@@ -173,14 +178,16 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 os.remove(txt_path)
             else:
                 await update.message.reply_text("❌ No numbers found in VCF file.")
-            conversion_mode.pop(user_id, None)
 
         else:
             await update.message.reply_text("❌ Wrong file type for this command.")
+
+        # ✅ reset mode & cleanup
+        conversion_mode.pop(user_id, None)
         if os.path.exists(path): os.remove(path)
         return
 
-    # fallback to normal file handling
+    # ✅ fallback: normal file handling
     try:
         if path.endswith('.csv'):
             df = pd.read_csv(path, encoding='utf-8')
