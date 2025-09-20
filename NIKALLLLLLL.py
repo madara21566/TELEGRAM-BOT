@@ -16,7 +16,7 @@ from telegram.ext import (
 # ========== CONFIGURATION ==========
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = 7640327597
-ALLOWED_USERS = [7640327597, 8047407478]  # add more IDs
+ALLOWED_USERS = [7640327597]  # add more IDs
 
 def is_authorized(user_id):
     return user_id in ALLOWED_USERS
