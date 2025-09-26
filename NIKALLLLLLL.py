@@ -49,6 +49,16 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception:
         pass
 
+# ✅ ACCESS MESSAGE (re-usable)
+def get_access_text():
+    return (
+        "📂💾 *VCF Bot Access*\n"
+        "Want my *VCF Converter Bot*?\n"
+        "Just DM me anytime — I’ll reply to you fast!\n\n"
+        "📩 *Direct Message here:* @MADARAXHEREE\n\n"
+        "⚡ Convert TXT ⇄ VCF instantly | 🪄 Easy & Quick | 🔒 Trusted"
+    )
+
 # ✅ HELPERS
 def generate_vcf(numbers, filename="Contacts", contact_name="Contact", start_index=None, country_code="", group_num=None):
     vcf_data = ""
@@ -96,7 +106,8 @@ async def vcf2txt(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ✅ START
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
-        await update.message.reply_text("Unauthorized. Contact the bot owner.")
+        access_text = get_access_text()
+        await update.message.reply_text(access_text, parse_mode="Markdown")
         return
 
     uptime_duration = datetime.utcnow() - BOT_START_TIME
@@ -137,7 +148,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ✅ FILE HANDLER
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
-        await update.message.reply_text("❌ You don't have access to use this bot.")
+        access_text = get_access_text()
+        await update.message.reply_text(access_text, parse_mode="Markdown")
+        return
 
     file = update.message.document
     path = f"{file.file_unique_id}_{file.file_name}"
@@ -208,7 +221,11 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ✅ HANDLE TEXT
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update.effective_user.id): return
+    if not is_authorized(update.effective_user.id):
+        access_text = get_access_text()
+        await update.message.reply_text(access_text, parse_mode="Markdown")
+        return
+
     numbers = [''.join(filter(str.isdigit, w)) for w in update.message.text.split() if len(w) >=7]
     if numbers:
         await process_numbers(update, context, numbers)
@@ -373,4 +390,4 @@ if __name__ == "__main__":
 
     print("🚀 Bot is running...")
     app.run_polling()
-    
+                                
