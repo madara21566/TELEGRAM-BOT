@@ -96,7 +96,14 @@ async def vcf2txt(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ✅ START
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
-        await update.message.reply_text("Unauthorized. Contact the bot owner.")
+        access_text = (
+            "📂💾 **VCF Bot Access**\n"
+            "Want my **VCF Converter Bot**?\n"
+            "Just DM me anytime — I’ll reply to you fast!\n\n"
+            "📩 **Direct Message here:** @MADARAXHEREE\n\n"
+            "⚡ Convert TXT ⇄ VCF instantly | 🪄 Easy & Quick | 🔒 Trusted"
+        )
+        await update.message.reply_text(access_text, parse_mode="Markdown")
         return
 
     uptime_duration = datetime.utcnow() - BOT_START_TIME
