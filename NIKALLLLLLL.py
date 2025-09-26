@@ -137,13 +137,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ✅ FILE HANDLER
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
-        await update.message.reply_text("📂💾 VCF Bot Access
-Want my VCF Converter Bot?
-Just DM me anytime — I’ll reply to you fast!
-
-📩 Direct Message here: @MADARAXHEREE
-
-⚡ Convert TXT ⇄ VCF instantly | 🪄 Easy & Quick | 🔒 Trusted")
+        await update.message.reply_text("📂💾 VCF Bot Access Want my VCF Converter Bot? Just DM me anytime — I’ll reply to you fast! 📩 Direct Message here: @MADARAXHEREE ⚡ Convert TXT ⇄ VCF instantly | 🪄 Easy & Quick | 🔒 Trusted")
         return
 
     file = update.message.document
