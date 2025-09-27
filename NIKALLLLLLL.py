@@ -283,18 +283,32 @@ async def make_vcf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_document(document=open(path, "rb"))
     os.remove(path)
 
-# ✅ MAIN
-if __name__ == "__main__":
+   # ✅ MAIN
+if __name__ == '__main__':
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("merge", merge_command))
-    app.add_handler(CommandHandler("done", done_merge))
-    app.add_handler(CommandHandler("txt2vcf", txt2vcf))
-    app.add_handler(CommandHandler("vcf2txt", vcf2txt))
-    app.add_handler(CommandHandler("makevcf", make_vcf_command))
+
+    # Commands
+    app.add_handler(CommandHandler('start', start))
+    app.add_handler(CommandHandler('setfilename', set_filename))
+    app.add_handler(CommandHandler('setcontactname', set_contact_name))
+    app.add_handler(CommandHandler('setlimit', set_limit))
+    app.add_handler(CommandHandler('setstart', set_start))
+    app.add_handler(CommandHandler('setvcfstart', set_vcf_start))
+    app.add_handler(CommandHandler('setcountrycode', set_country_code))
+    app.add_handler(CommandHandler('setgroup', set_group_number))
+    app.add_handler(CommandHandler('reset', reset_settings))
+    app.add_handler(CommandHandler('mysettings', my_settings))
+    app.add_handler(CommandHandler('makevcf', make_vcf_command))
+    app.add_handler(CommandHandler('merge', merge_command))
+    app.add_handler(CommandHandler('done', done_merge))
+
+    # File and text handlers
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+    # Error handler
     app.add_error_handler(error_handler)
-    print("🚀 GOD MADARA VCF Bot is running...")
+
+    print("🚀 Bot is running...")
     app.run_polling()
-                                                     
+                                                      
