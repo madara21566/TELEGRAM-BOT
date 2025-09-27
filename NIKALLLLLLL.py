@@ -106,8 +106,7 @@ async def vcf2txt(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ✅ START
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
-        access_text = get_access_text()
-        await update.message.reply_text(access_text, parse_mode="Markdown")
+        await update.message.reply_text(get_access_text(), parse_mode="Markdown")
         return
 
     uptime_duration = datetime.utcnow() - BOT_START_TIME
@@ -148,8 +147,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ✅ FILE HANDLER
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
-        access_text = get_access_text()
-        await update.message.reply_text(access_text, parse_mode="Markdown")
+        await update.message.reply_text(get_access_text(), parse_mode="Markdown")
         return
 
     file = update.message.document
@@ -222,8 +220,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ✅ HANDLE TEXT
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
-        access_text = get_access_text()
-        await update.message.reply_text(access_text, parse_mode="Markdown")
+        await update.message.reply_text(get_access_text(), parse_mode="Markdown")
         return
 
     numbers = [''.join(filter(str.isdigit, w)) for w in update.message.text.split() if len(w) >=7]
@@ -329,7 +326,6 @@ async def make_vcf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     contact_name = context.args[0]
     numbers = context.args[1:]
     
-    # File name और contact prefix दोनों same रखे
     file_path = generate_vcf(numbers, contact_name, contact_name)
     
     await update.message.reply_document(document=open(file_path, "rb"))
@@ -390,4 +386,3 @@ if __name__ == "__main__":
 
     print("🚀 Bot is running...")
     app.run_polling()
-                                
