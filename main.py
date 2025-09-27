@@ -109,12 +109,22 @@ def is_authorized(user_id: int) -> bool:
     # original allowed users (module) OR local DB-based check
     return (user_id in getattr(NIKALLLLLLL, "ALLOWED_USERS", [])) or is_authorized_in_db(user_id)
 
+def get_access_text():
+    return (
+        "📂💾 *VCF Bot Access*\n"
+        "Want my *VCF Converter Bot*?\n"
+        "Just DM me anytime — I’ll reply to you fast!\n\n"
+        "📩 *Direct Message here:* @MADARAXHEREE\n\n"
+        "⚡ Convert TXT ⇄ VCF instantly | 🪄 Easy & Quick | 🔒 Trusted"
+    )
+
 def protected(handler_func, command_name):
     async def wrapper(update, context):
         user = update.effective_user
         try:
             if not is_authorized(user.id):
-                await update.message.reply_text("❌ You don't have access to use this bot.")
+                # replaced old ❌ message with premium access text (no other code changed)
+                await update.message.reply_text(get_access_text(), parse_mode="Markdown")
                 return
             log_action(user.id, user.username, command_name)
             return await handler_func(update, context)
