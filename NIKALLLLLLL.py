@@ -607,7 +607,7 @@ async def revokekey(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.commit()
     await update.message.reply_text(f'✅ Key {key} revoked.')
     await log_action(update.effective_user.id, f'Attempted invalid key {key}')
-        return
+    return
     _, duration, expiry_str, used_by = row
     try:
         expiry_dt = datetime.datetime.fromisoformat(expiry_str)
