@@ -146,8 +146,7 @@ def authorize_user_with_key(user_id, username, key):
 # ==================== VCF BOT (original code) ====================
 
 # BOT START TIME
-BOT_START_TIME = datetime.utcnow()
-
+BOT_START_TIME = datetime.datetime.utcnow()
 # DEFAULTS
 default_vcf_name = "Contacts"
 default_contact_name = "Contact"
