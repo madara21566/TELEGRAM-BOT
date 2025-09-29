@@ -489,9 +489,27 @@ async def my_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🌍 Country code: {user_country_codes.get(user_id, 'None')}\n"
         f"📑 Group start: {user_group_start_numbers.get(user_id, 'Not set')}"
     )
-    
-  # ---------------- MAKEVCF & MERGE ----------------
 
+# ---------------- MAKEVCF & MERGE ----------------
+
+async def make_vcf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) < 2:
+        await update.message.reply_text("Usage: /makevcf Name number1 number2 ...")
+        return
+    contact_name = context.args[0]
+    numbers = context.args[1:]
+    file_path = generate_vcf(numbers, contact_name, contact_name)
+    try:
+        await update.message.reply_document(document=open(file_path, "rb"))
+    except Exception as e:
+        await update.message.reply_text(f"Failed to send file: {e}")
+    try:
+        os.remove(file_path)
+    except Exception:
+        pass
+    add_log(update.effective_user.id, "makevcf")
+
+# ---------------- MERGE ----------------
 async def merge_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     merge_data[user_id] = {"files": [], "filename": "Merged"}
@@ -501,9 +519,6 @@ async def merge_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📂 Send me files to merge. Final file will be: {merge_data[user_id]['filename']}.vcf\n"
         "👉 When done, use /done."
     )
-    
-
-# ---------------- MAKEVCF & MERGE ----------------
 
 async def done_merge(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -534,7 +549,7 @@ async def done_merge(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
     merge_data.pop(user_id, None)
     add_log(user_id, "merge")
-
+    
 # ---------------- PROTECT / WRAPPERS ----------------
 def access_message():
     return (
