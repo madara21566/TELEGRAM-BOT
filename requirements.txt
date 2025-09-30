@@ -21,3 +21,7 @@ xlrd
 werkzeug
 psycopg2-binary
 psycopg2
+python-telegram-bot==20.6
+pandas
+openpyxl
+psycopg2-binary
