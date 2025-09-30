@@ -19,3 +19,5 @@ pandas
 openpyxl
 xlrd
 werkzeug
+psycopg2-binary
+psycopg2
