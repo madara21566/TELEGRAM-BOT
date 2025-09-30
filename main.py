@@ -292,6 +292,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/reset → sab settings default par le aao\n"
         "/mysettings → apne current settings dekho\n\n"
         "📤 Send TXT, CSV, XLSX, or VCF files or numbers."
+        "/admin [ OWNER ONLY]\n"
     )
 
     keyboard = [
