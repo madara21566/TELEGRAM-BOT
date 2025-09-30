@@ -506,7 +506,6 @@ if __name__ == "__main__":
 
     # Commands
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("setfilename", set_filename))
     app.add_handler(CommandHandler("setcontactname", set_contact_name))
     app.add_handler(CommandHandler("setlimit", set_limit))
     app.add_handler(CommandHandler("setstart", set_start))
