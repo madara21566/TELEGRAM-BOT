@@ -39,7 +39,7 @@ level=logging.INFO,
 format="%(asctime)s | %(levelname)s | %(message)s",
 )
 logger = logging.getLogger("render_bot")
-last_alert_time: dic = {}
+last_alert_time: dict = {}
 
 # ---------- Telegram helper ----------
 
