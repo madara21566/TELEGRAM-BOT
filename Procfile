@@ -1,2 +1,5 @@
-release: python -m playwright install --with-deps chromium
-worker: python main.py
+services:
+  - type: web
+    name: telegram-bot
+    env: docker
+    plan: free
