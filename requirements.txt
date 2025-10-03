@@ -24,4 +24,5 @@ openpyxl
 psycopg2-binary
 python-telegram-bot
 aiohttp
-playwright
+playwright==1.48.0
+playwright-bundled-chromium
