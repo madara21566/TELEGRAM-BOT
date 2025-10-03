@@ -23,5 +23,6 @@ pandas
 openpyxl
 psycopg2-binary
 python-telegram-bot
-aiohttp
 playwright==1.48.0
+python-telegram-bot==20.3
+aiohttp
