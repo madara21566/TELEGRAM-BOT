@@ -77,4 +77,5 @@ def create_protobuf_packet(fields):
         elif isinstance(value, str) or isinstance(value, bytes):
             packet.extend(create_length_delimited_field(field, value))
     
+
     return packet
