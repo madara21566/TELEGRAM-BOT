@@ -360,7 +360,7 @@ def get_random_avatar():
 
 def get_jwt_token():
     global jwt_token
-    url = "https://jnl-gen-jwt.vercel.app/token?uid=3749037912&password=F1E84B08BB6C1A3695C755802E68C71D0A4D07B7B474315B4DE3518BA30DE683"
+    url = "https://jnl-gen-jwt.vercel.app/token?uid=4205635582&password=5E0BA72F3D6BBAC9D6398BA197EB4B8E0A7984565988315F9D120A8AFB60CB7B"
     try:
         response = httpx.get(url)
         if response.status_code == 200:
@@ -2223,7 +2223,7 @@ for thread in threads:
     
 if __name__ == "__main__":
     try:
-        client_thread = FF_CLIENT(id="3749037912", password="F1E84B08BB6C1A3695C755802E68C71D0A4D07B7B474315B4DE3518BA30DE683")
+        client_thread = FF_CLIENT(id="4205635582", password="5E0BA72F3D6BBAC9D6398BA197EB4B8E0A7984565988315F9D120A8AFB60CB7B")
         client_thread.start()
     except Exception as e:
         logging.error(f"Error occurred: {e}")
