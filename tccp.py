@@ -360,7 +360,7 @@ def get_random_avatar():
 
 def get_jwt_token():
     global jwt_token
-    url = "https://jnl-gen-jwt.vercel.app/token?uid=3959572657&password=D3F9FD986A98F657EB46D858FFA74EA92A17A3C3303B78489B2E02494832741C"
+    url = "https://jnl-gen-jwt.vercel.app/token?uid=3749037912&password=F1E84B08BB6C1A3695C755802E68C71D0A4D07B7B474315B4DE3518BA30DE683"
     try:
         response = httpx.get(url)
         if response.status_code == 200:
