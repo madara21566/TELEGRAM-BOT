@@ -68,7 +68,11 @@ from NIKALLLLLLL import (
     start, set_filename, set_contact_name, set_limit, set_start,
     set_vcf_start, set_country_code, set_group_number,
     make_vcf_command, merge_command, done_merge,
-    handle_document, handle_text, OWNER_ID, ALLOWED_USERS, reset_settings, my_settings,txt2vcf, vcf2txt
+    handle_document, handle_text, OWNER_ID, ALLOWED_USERS,
+    reset_settings, my_settings, txt2vcf, vcf2txt,
+
+    # 👇 ADD THESE NEW ONES
+    analyze_file, combine_command, done_combine, broadcast
 )
 
 # ============ TELEGRAM BOT SETUP ============
@@ -154,6 +158,11 @@ if application:
     application.add_handler(CommandHandler("done",           protected(done_merge, "done")))
     application.add_handler(CommandHandler("txt2vcf",        protected(txt2vcf, "txt2vcf")))
     application.add_handler(CommandHandler("vcf2txt",        protected(vcf2txt, "vcf2txt")))
+        application.add_handler(CommandHandler("analyze",      protected(analyze_file, "analyze")))
+    application.add_handler(CommandHandler("combine",      protected(combine_command, "combine")))
+    application.add_handler(CommandHandler("donecombine",  protected(done_combine, "donecombine")))
+    application.add_handler(CommandHandler("broadcast",    protected(broadcast, "broadcast")))
+
     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_error_handler(error_handler)
