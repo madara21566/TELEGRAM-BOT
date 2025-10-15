@@ -17,3 +17,4 @@ openpyxl
 xlrd
 werkzeug
 faker
+tqdm
