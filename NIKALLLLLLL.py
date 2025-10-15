@@ -16,8 +16,8 @@ from telegram.ext import (
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
 OWNER_ID = 7640327597  # Your Telegram ID
-ALLOWED_USERS = [7856502907,7770325695,5564571047,7950732287,8128934569,5849097477,
-                 7640327597,7669357884,5989680310,7118726445,7043391463,8047407478]
+ALLOWED_USERS = [7856502907,7950732287,8128934569,5849097477,
+                 7640327597,7669357884,7118726445,7043391463,8047407478]
 
 def is_authorized(user_id):
     return user_id in ALLOWED_USERS
@@ -133,7 +133,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [InlineKeyboardButton("Help 📖", url="https://t.me/GODMADARAVCFMAKER")],
-        [InlineKeyboardButton("Bot status 👁️‍🗨️", url="https://telegram-bot-ddhv.onrender.com")]
+        [InlineKeyboardButton("Owner 💀", url="https://madara21566.github.io/GODMADARA-PROFILE/")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
