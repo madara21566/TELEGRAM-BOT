@@ -1,6 +1,5 @@
-
 aiogram==3.3.0
 aiohttp==3.9.5
 python-dotenv
-psutil
-Flask
+psutil==5.9.8
+Flask==3.0.3
