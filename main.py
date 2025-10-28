@@ -52,8 +52,8 @@ UPLOAD_BOTS_DIR = BASE_DIR / 'upload_bots'
 IROTECH_DIR = BASE_DIR / 'inf'
 DATABASE_PATH = IROTECH_DIR / 'bot_data.db'
 
-FREE_USER_LIMIT = 20
-SUBSCRIBED_USER_LIMIT = 50
+FREE_USER_LIMIT = 2
+SUBSCRIBED_USER_LIMIT = 10
 ADMIN_LIMIT = 999
 OWNER_LIMIT = float('inf')
 
@@ -661,7 +661,7 @@ async def callback_get_premium(callback: types.CallbackQuery):
 
 <b>✨ PREMIUM BENEFITS:</b>
 
-📦 50 File Upload Limit
+📦 20 File Upload Limit
 ⚡ Priority Processing
 🚀 Faster Response Time
 📊 Advanced Analytics
