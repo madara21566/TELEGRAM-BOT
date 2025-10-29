@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head><title>Dashboard</title><link rel="stylesheet" href="/static/style.css"></head>
+<body>
+<h1>Admin Dashboard</h1>
+<p>CPU Usage: {{ cpu }}%</p>
+<p>RAM Usage: {{ ram }}%</p>
+<p>Storage: {{ storage }}%</p>
+<p>Uptime: {{ uptime }}s</p>
+<p>Total Users: {{ users }}</p>
+<p>Running Projects: {{ projects }}</p>
+<!-- Add tables for users/projects/logs as needed -->
+<a href="/logout">Logout</a>
+</body>
+</html>
