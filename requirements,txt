@@ -1,0 +1,27 @@
+# Core frameworks
+python-telegram-bot==20.6
+Flask==3.0.3
+Flask-Login==0.6.3
+Flask-SQLAlchemy==3.1.1
+Flask-WTF==1.2.1
+WTForms==3.1.2
+
+# Database & ORM
+SQLAlchemy==2.0.31
+alembic==1.13.2
+
+# Background tasks / scheduling
+APScheduler==3.10.4
+
+# System / subprocess tools
+docker==7.1.0
+psutil==6.0.0
+
+# Utils
+requests==2.32.3
+python-dotenv==1.0.1
+Werkzeug==3.0.3
+
+# Optional editor & file manager support
+itsdangerous==2.2.0
+Jinja2==3.1.4
