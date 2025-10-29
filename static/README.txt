@@ -1,1 +1,0 @@
-Static assets placeholder. Ace editor loaded from CDN.
