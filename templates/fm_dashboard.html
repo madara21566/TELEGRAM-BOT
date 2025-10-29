@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head><title>File Manager</title><link rel="stylesheet" href="/static/style.css"></head>
+<body>
+<h1>Your Files</h1>
+<ul>
+  {% for file in files %}
+    <li>{{ file }} 
+      <a href="/download/{{ file }}">Download</a> 
+      <form method="post" style="display:inline;">
+        <button type="submit" name="action" value="edit_{{ file }}">Edit</button>
+        <button type="submit" name="action" value="delete_{{ file }}">Delete</button>
+      </form>
+    </li>
+  {% endfor %}
+</ul>
+<form method="post" enctype="multipart/form-data">
+  <input type="file" name="file" required>
+  <button type="submit">Upload</button>
+</form>
+<a href="/logout">Logout</a>
+</body>
+</html>
