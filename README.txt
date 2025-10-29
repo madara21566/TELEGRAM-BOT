@@ -1,1 +1,1 @@
-GOD MADARA FINAL - Deploy to Render. Set BOT_TOKEN, CHANNEL_A, CHANNEL_B, RENDER_EXTERNAL_HOSTNAME, WEB_SECRET_KEY
+Static assets placeholder.
