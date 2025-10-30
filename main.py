@@ -378,7 +378,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Send files or ZIP:")
         context.user_data['awaiting_files'] = True
           elif 'awaiting_files' in context.user_data:
-        if update.message.document:
+          if update.message.document:
             files = [update.message.document] + (update.message.documents or [])
             user_dir = os.path.join(PROJECTS_DIR, str(user_id))
             project_dir = os.path.join(user_dir, context.user_data['project_name'])
