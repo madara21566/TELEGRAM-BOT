@@ -371,22 +371,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if 'awaiting_name' in context.user_data:
+        if 'awaiting_name' in context.user_data:
         project_name = update.message.text
         context.user_data['project_name'] = project_name
         context.user_data['awaiting_name'] = False
         await update.message.reply_text("Send files or ZIP:")
         context.user_data['awaiting_files'] = True
-          elif 'awaiting_files' in context.user_data:
-          if update.message.document:
+
+    elif 'awaiting_files' in context.user_data:
+        if update.message.document:
             files = [update.message.document] + (update.message.documents or [])
             user_dir = os.path.join(PROJECTS_DIR, str(user_id))
             project_dir = os.path.join(user_dir, context.user_data['project_name'])
             os.makedirs(project_dir, exist_ok=True)
             for file in files:
                 file_path = os.path.join(project_dir, file.file_name)
-            await file.download_to_drive(file_path)
-            if file.file_name.endswith('.zip'):
+                await file.download_to_drive(file_path)
+                if file.file_name.endswith('.zip'):
                     with zipfile.ZipFile(file_path, 'r') as zip_ref:
                         zip_ref.extractall(project_dir)
                     os.remove(file_path)
@@ -399,6 +400,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
             await update.message.reply_text("Project uploaded:", reply_markup=InlineKeyboardMarkup(keyboard))
             context.user_data['awaiting_files'] = False
+            
     elif 'editing_cmd' in context.user_data:
         new_cmd = update.message.text
         project_id = context.user_data['editing_cmd']
