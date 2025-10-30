@@ -385,8 +385,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.makedirs(project_dir, exist_ok=True)
             for file in files:
                 file_path = os.path.join(project_dir, file.file_name)
-                await file.download_to_drive(file_path)
-                if file.file_name.endswith('.zip'):
+            await file.download_to_drive(file_path)
+            if file.file_name.endswith('.zip'):
                     with zipfile.ZipFile(file_path, 'r') as zip_ref:
                         zip_ref.extractall(project_dir)
                     os.remove(file_path)
