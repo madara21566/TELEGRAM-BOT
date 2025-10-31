@@ -1,0 +1,20 @@
+# Example render.yaml for two services (web + background worker). You can also deploy with Docker or single service.
+services:
+- type: web
+name: python-hosting-dashboard
+env: docker
+dockerfilePath: ./Dockerfile
+plan: starter
+instances: 1
+disk:
+mountPath: /persistent
+sizeGB: 5
+- type: worker
+name: python-hosting-bot
+env: docker
+dockerfilePath: ./Dockerfile
+plan: starter
+instances: 1
+disk:
+mountPath: /persistent
+sizeGB: 5
