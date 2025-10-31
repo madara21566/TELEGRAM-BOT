@@ -1,4 +1,5 @@
 python-telegram-bot==20.3
-Flask==3.0.3
-psutil==5.9.8
-gunicorn==21.2.0
+aiogram>=3.0.0
+asyncio
+psutil
+apscheduler
