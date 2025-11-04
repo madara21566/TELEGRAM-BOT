@@ -1,5 +1,5 @@
 # --- Render Safe Requirements (no Rust build needed) ---
-aiogram==3.4.1
+aiogram==2.25.1
 aiofiles
 Flask
 psutil
