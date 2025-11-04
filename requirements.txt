@@ -1,7 +1,11 @@
-# === Safe pure-Python deps for MADARA HOSTING BOT ===
+# --- Render Safe Requirements (no Rust build needed) ---
 aiogram==3.4.1
 aiofiles
 Flask
 psutil
 python-dotenv
 requests
+certifi
+charset-normalizer
+idna
+urllib3
