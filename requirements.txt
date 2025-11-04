@@ -1,5 +1,7 @@
+# === Safe pure-Python deps for MADARA HOSTING BOT ===
 aiogram==3.4.1
-flask>=2.0
+aiofiles
+Flask
 psutil
 python-dotenv
-aiofiles
+requests
