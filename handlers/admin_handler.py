@@ -108,7 +108,7 @@ async def backup_manager(call: types.CallbackQuery):
 #                    REGISTER HANDLERS                    #
 # ======================================================= #
 
-def register_admin_handlers(dp):
+def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
     dp.register_message_handler(open_admin_panel, commands=["admin"])
     dp.register_callback_query_handler(user_list, lambda c: c.data == "admin_user_list")
     dp.register_callback_query_handler(add_premium, lambda c: c.data == "admin_add_premium")
