@@ -1,0 +1,36 @@
+<!doctype html><html><head>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>File Manager</title>
+<style>
+body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:20px;background:#fff;color:#111}
+.card{border:1px solid #e5e7eb;border-radius:14px;padding:16px;box-shadow:0 1px 6px rgba(0,0,0,.05)}
+h2{margin-top:0}
+.btn{display:inline-block;padding:8px 12px;border:1px solid #e5e7eb;border-radius:10px;text-decoration:none;margin:4px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.file{padding:8px;border:1px dashed #e5e7eb;border-radius:10px}
+small{color:#6b7280}
+</style>
+</head><body>
+<div class=card>
+<h2>📂 File Manager</h2>
+<p><small>Project: {{proj}} | User: {{uid}}</small></p>
+<form action="/fm/upload" method="post" enctype="multipart/form-data">
+  <input type="hidden" name="uid" value="{{uid}}">
+  <input type="hidden" name="proj" value="{{proj}}">
+  <input type="hidden" name="token" value="{{token}}">
+  <input type="file" name="file" required>
+  <button class="btn" type="submit">Upload</button>
+</form>
+<hr>
+<div class="grid">
+{% for f in files %}
+  <div class="file">
+    <b>{{f}}</b><br>
+    <a class="btn" href="/fm/download?uid={{uid}}&proj={{proj}}&token={{token}}&path={{f}}">Download</a>
+    <a class="btn" href="/fm/edit?uid={{uid}}&proj={{proj}}&token={{token}}&path={{f}}">Edit</a>
+    <a class="btn" href="/fm/delete?uid={{uid}}&proj={{proj}}&token={{token}}&path={{f}}">Delete</a>
+  </div>
+{% endfor %}
+</div>
+</div>
+</body></html>
