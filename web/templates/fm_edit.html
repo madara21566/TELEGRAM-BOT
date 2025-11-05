@@ -1,0 +1,14 @@
+<!doctype html><html><head>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Edit File</title>
+<style>
+textarea{width:100%;height:60vh;border:1px solid #e5e7eb;border-radius:14px;padding:12px;font-family:ui-monospace,Menlo,Consolas}
+.btn{display:inline-block;padding:8px 12px;border:1px solid #e5e7eb;border-radius:10px;text-decoration:none;margin:4px}
+</style>
+</head><body>
+<h2>✏️ Edit: {{path}}</h2>
+<form method="post">
+  <textarea name="content">{{content}}</textarea><br>
+  <button class="btn" type="submit">Save</button>
+</form>
+</body></html>
