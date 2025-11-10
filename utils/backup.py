@@ -1,9 +1,25 @@
-import os, shutil, time, zipfile
+import os, shutil, time, requests
+from utils.helpers import load_json, save_json, STATE_FILE
 
-def backup_projects():
-    base = "data/users"
-    out_root = "data/backups"
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+OWNER_ID = os.getenv("OWNER_ID", "")
+
+def _send_document_to_owner(path):
+    if not BOT_TOKEN or not OWNER_ID: return
+    try:
+        with open(path, "rb") as f:
+            requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
+                data={"chat_id": OWNER_ID, "caption": "📦 Auto backup"},
+                files={"document": (os.path.basename(path), f)}
+            )
+    except Exception:
+        pass
+
+def backup_projects_and_notify_owner():
+    base = "data/users"; out_root = "data/backups"
     os.makedirs(out_root, exist_ok=True)
+    made = []
     for uid in os.listdir(base):
         udir = os.path.join(base, uid)
         if not os.path.isdir(udir): continue
@@ -13,9 +29,13 @@ def backup_projects():
             ts = int(time.time())
             outdir = os.path.join(out_root, uid)
             os.makedirs(outdir, exist_ok=True)
-            shutil.make_archive(os.path.join(outdir, f"{proj}_{ts}"), "zip", pdir)
+            out = os.path.join(outdir, f"{proj}_{ts}")
+            shutil.make_archive(out, "zip", pdir)
+            zip_path = f"{out}.zip"
+            made.append(zip_path)
+            _send_document_to_owner(zip_path)
 
-    # keep only last 3 per user
+    # Keep only last 3 per user
     for uid in os.listdir(out_root):
         uout = os.path.join(out_root, uid)
         if not os.path.isdir(uout): continue
@@ -24,22 +44,8 @@ def backup_projects():
             try: os.remove(os.path.join(uout, old))
             except Exception: pass
 
-def _latest_backup_path(uid, proj):
-    uout = os.path.join("data/backups", str(uid))
-    if not os.path.isdir(uout): return None
-    zips = sorted([f for f in os.listdir(uout) if f.startswith(proj + "_") and f.endswith(".zip")], reverse=True)
-    if not zips: return None
-    return os.path.join(uout, zips[0])
-
-def restore_latest_if_missing(uid, proj):
-    """If data/users/<uid>/<proj> doesn't exist, restore from latest backup zip."""
-    base = os.path.join("data/users", str(uid), proj)
-    if os.path.isdir(base):
-        return False
-    os.makedirs(base, exist_ok=True)
-    latest = _latest_backup_path(uid, proj)
-    if not latest:
-        return False
-    with zipfile.ZipFile(latest, "r") as z:
-        z.extractall(base)
-    return True
+    # record last backup time
+    if made:
+        st = load_json()
+        st["last_backup"] = int(time.time())
+        save_json(STATE_FILE, st)
