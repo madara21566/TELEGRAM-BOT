@@ -1,57 +1,70 @@
-import time, os
+import time
+import os
+from datetime import datetime, timezone
+
 from utils.helpers import load_json, save_json, STATE_FILE
-from utils.runner import stop_script, start_script
+from utils.runner import start_script, stop_script, get_status
 
-# Free user limits
-FREE_PROJECT_LIMIT = 2
-FREE_RUNTIME_LIMIT = 12 * 3600  # 12 hours in seconds
 
-# Premium user limits
-PREMIUM_PROJECT_LIMIT = 10
-PREMIUM_RUNTIME_LIMIT = None  # Unlimited (24/7)
+# Free users: max 12h runtime
+FREE_LIMIT_SECONDS = 12 * 60 * 60
+
+# Premium users: unlimited (24/7)
+# Just auto-restart if stopped
+
 
 def check_expired():
-    state = load_json()
-    users = state.get("users", {})
-    procs = state.get("procs", {})
+    """Stop free-user projects that exceeded allowed runtime."""
+    st = load_json()
+    procs = st.get("procs", {})
 
     for uid, projects in procs.items():
-        uid_str = str(uid)
+        for proj, entry in projects.items():
+            start_time = entry.get("start", None)
+            if not start_time:
+                continue
 
-        # Is user premium?
-        is_premium = users.get(uid_str, {}).get("premium", False)
+            user_id = int(uid)
+            is_premium = str(user_id) in st.get("premium", [])
 
-        # Set correct limits
-        project_limit = PREMIUM_PROJECT_LIMIT if is_premium else FREE_PROJECT_LIMIT
-        runtime_limit = PREMIUM_RUNTIME_LIMIT if is_premium else FREE_RUNTIME_LIMIT
+            # If premium -> no time limit
+            if is_premium:
+                continue
 
-        # Check project count
-        user_projects = users.get(uid_str, {}).get("projects", [])
-        if len(user_projects) > project_limit:
-            extra = user_projects[project_limit:]
-            for project in extra:
-                stop_script(uid_str, project)
+            # If free user -> stop if > 12h
+            uptime = int(time.time()) - int(start_time)
+            if uptime >= FREE_LIMIT_SECONDS:
+                stop_script(user_id, proj.split(":")[0])
+                print(f"[Auto-Stop] Free user project stopped: {proj} (User {user_id})")
 
-        # Check runtime expiration
-        for proj_key, info in list(projects.items()):
-            proj = proj_key.split(":")[0]
-            start_time = info.get("start", 0)
-
-            if runtime_limit and start_time and (time.time() - start_time > runtime_limit):
-                stop_script(uid_str, proj)
-
-    save_json(STATE_FILE, state)
+    save_json(STATE_FILE, st)
 
 
 def restore_processes_after_restart():
-    state = load_json()
-    procs = state.get("procs", {})
+    """Restart projects that were running before restart for Premium users."""
+    time.sleep(4)  # wait until bot & system fully initialize
+
+    st = load_json()
+    procs = st.get("procs", {})
 
     for uid, projects in procs.items():
-        for proj_key, info in projects.items():
-            proj = proj_key.split(":")[0]
-            cmd = info.get("cmd", None)
-            try:
-                start_script(uid, proj, cmd)
-            except:
-                pass
+        for proj, entry in projects.items():
+            user_id = int(uid)
+            proj_name = proj.split(":")[0]
+
+            is_premium = str(user_id) in st.get("premium", [])
+            status = get_status(user_id, proj_name).get("running", False)
+
+            # If already running, ignore
+            if status:
+                continue
+
+            # Only restore for premium users
+            if is_premium:
+                try:
+                    start_script(user_id, proj_name)
+                    print(f"[Auto-Restore] Restarted project {proj_name} for premium user {user_id}")
+                except Exception as e:
+                    print(f"[Auto-Restore Error] {proj_name}: {e}")
+
+    save_json(STATE_FILE, st)
