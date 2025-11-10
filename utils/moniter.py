@@ -1,4 +1,3 @@
-# utils/monitor.py
 import time, os, signal
 from utils.helpers import load_json, save_json, STATE_FILE
 
@@ -17,5 +16,8 @@ def check_expired():
                     pass
                 del procs[key]
                 changed = True
+        if uid in st.get("procs", {}) and not st["procs"][uid]:
+            del st["procs"][uid]
+            changed = True
     if changed:
         save_json(STATE_FILE, st)
