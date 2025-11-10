@@ -1,5 +1,4 @@
 import json, os
-
 STATE_FILE = "data/state.json"
 
 def load_json(path=STATE_FILE, default=None):
@@ -22,14 +21,10 @@ def ensure_state_user(uid):
     save_json(STATE_FILE, st)
     return st
 
+def register_user(uid):
+    st = ensure_state_user(uid)
+    return st
+
 def is_banned(uid):
     st = load_json()
     return str(uid) in st.get("banned", [])
-
-def is_premium(uid):
-    st = load_json()
-    return str(uid) in st.get("premium_users", [])
-
-def running_count(uid):
-    st = load_json()
-    return len(st.get("procs", {}).get(str(uid), {}))
