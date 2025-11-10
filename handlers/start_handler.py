@@ -1,8 +1,10 @@
 import os
 from aiogram import types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from utils.helpers import register_user, is_banned
 
 OWNER_ID = int(os.getenv("OWNER_ID","0"))
+BASE_URL = os.getenv("BASE_URL","")
 
 WELCOME = (
 "👋 Welcome to MADARA Python Hosting Bot!\n\n"
@@ -36,27 +38,29 @@ def main_menu(uid:int):
         InlineKeyboardButton("💬 Help", callback_data="menu:help"),
         InlineKeyboardButton("⭐ Premium", callback_data="menu:premium"),
     )
-    if uid == OWNER_ID:
+    if uid == OWNER_ID and BASE_URL:
+        kb.add(InlineKeyboardButton("🌐 Admin Dashboard", url=f"{BASE_URL}/admin/dashboard?key={OWNER_ID}"))
         kb.add(InlineKeyboardButton("🛠 Admin Panel", callback_data="admin:main"))
     return kb
 
 def register_start_handlers(dp, bot, owner_id, base_url):
     @dp.message_handler(commands=['start'])
     async def start_cmd(msg: types.Message):
+        if is_banned(msg.from_user.id):
+            return await msg.answer("🚫 You are banned.")
+        register_user(msg.from_user.id)
         await msg.answer(WELCOME, reply_markup=main_menu(msg.from_user.id))
 
     @dp.callback_query_handler(lambda c: c.data == "menu:help")
     async def help_cb(c: types.CallbackQuery):
         await c.message.edit_text(
-            "📘 Help\n\n"
+            "📘 How to use:\n"
             "1) New Project → send name → upload .py/.zip\n"
-            "2) My Projects → Run/Stop/Restart/Logs/File Manager/Delete\n"
-            "3) Admin Panel → owner-only controls\n",
+            "2) My Projects → Run/Stop/Restart/Logs/File Manager/Delete\n",
             reply_markup=main_menu(c.from_user.id)
-        )
-        await c.answer()
+        ); await c.answer()
 
     @dp.callback_query_handler(lambda c: c.data == "menu:premium")
     async def premium_cb(c: types.CallbackQuery):
-        await c.message.edit_text("⭐ For premium upgrade, contact @MADARAXHEREE", reply_markup=main_menu(c.from_user.id))
-        await c.answer()
+        await c.message.edit_text("⭐ For premium upgrade, contact @MADARAXHEREE",
+                                  reply_markup=main_menu(c.from_user.id)); await c.answer()
