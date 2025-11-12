@@ -1,6 +1,7 @@
 aiogram==2.25.1
-Flask
-aiofiles
+aiohttp==3.8.6
+Flask==3.0.3
 psutil
 python-dotenv
 requests
+aiofiles
