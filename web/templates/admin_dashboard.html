@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html><head><title>Admin Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body{font-family:Arial;background:#f5f7fa;color:#222} .card{background:#fff;padding:12px;margin:12px;border-radius:10px}
+</style>
+</head><body>
+<h2>Admin Dashboard</h2>
+<div class="card">
+Total Users: {{data.total_users}} | Projects: {{data.total_projects}} | Running: {{data.running}} | Last backup: {{data.last_backup if data.get('last_backup') else 'N/A'}}
+</div>
+<div class="card"><canvas id="cpu"></canvas></div>
+<script>
+async function r(){const res=await fetch('/admin/dashboard/json?key={{request.args.get("key")}}');const d=await res.json();console.log(d);}
+setInterval(r,5000);
+</script>
+</body></html>
