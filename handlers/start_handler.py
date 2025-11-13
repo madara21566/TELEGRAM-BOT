@@ -1,87 +1,125 @@
-import os, time
 from aiogram import types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from utils.helpers import generate_redeem_code, redeem_code, is_premium
+from utils.helpers import generate_redeem_code, redeem_code, is_premium, ensure_state_user, load_json, save_json, STATE_FILE
 
-OWNER_ID = int(os.getenv('OWNER_ID','0'))
-BASE_URL = os.getenv('BASE_URL','')
+WELCOME = """
+👋 **Welcome to the Python Project Hoster!**
 
-WELCOME = ("👋 Welcome to MADARA Python Hosting Bot!\n\n"
-"Deploy & run Python scripts directly from Telegram.\n"
-"No VPS • No Terminal • No Setup • Just Upload & Run 🚀\n\n"
-"━━━━━━━━━━━━━━━━━━━\n"
-"⚡ Features:\n"
-"• Upload & run any .py or .zip project\n"
-"• Auto-install missing libraries\n"
-"• Start • Stop • Restart controls\n"
-"• Live Logs & File Manager Web Dashboard\n"
-"• Automatic Backup System\n"
-"━━━━━━━━━━━━━━━━━━━\n\n"
-"🆓 Free Tier:\n"
-"• Host up to 2 projects\n"
-"• Max runtime 12 hours each session\n\n"
-"⭐ Premium Tier:\n"
-"• Host up to 10 projects\n"
-"• 24/7 Infinite Runtime\n"
-"• Priority CPU & Fast Processing\n\n"
-"Upgrade: @MADARAXHEREE\n"
-"━━━━━━━━━━━━━━━━━━━\n"
-"👇 Choose what to do:\n"
-          )
+I'm your personal bot for securely deploying and managing your Python scripts and applications, right here from Telegram.
 
-def main_menu(uid:int):
+━━━━━━━━━━━━━━━━━━━
+⚡ **Key Features:**
+🚀 Deploy Instantly — Upload your code as a .zip or .py file and I'll handle the rest.  
+📂 Easy Management — Use the built-in file manager to edit your files.  
+🤖 Full Control — Start, stop, restart & view logs for all projects.  
+🪄 Auto Setup — I auto-install missing libraries!  
+💾 Auto Backup — Every 10 minutes.
+━━━━━━━━━━━━━━━━━━━
+
+🆓 **Free Tier**
+• 2 projects  
+• Max 12-hour runtime per project  
+
+⭐ **Premium Tier**
+• 10 projects  
+• 24/7 continuous runtime  
+• Priority speed  
+• Fast backups  
+• Restore anytime  
+━━━━━━━━━━━━━━━━━━━
+
+🔐 Need Premium? Tap **“⭐ Premium”**
+━━━━━━━━━━━━━━━━━━━
+
+👇 **Choose an option**:
+"""
+
+def main_menu(uid):
     kb = InlineKeyboardMarkup(row_width=2)
-    kb.add(InlineKeyboardButton("🆕 New Project", callback_data="deploy:start"),
-           InlineKeyboardButton("📂 My Projects", callback_data="menu:my_projects"),
-           InlineKeyboardButton("💬 Help", callback_data="menu:help"),
-           InlineKeyboardButton("⭐ Premium", callback_data="menu:premium"))
-    if uid == OWNER_ID and BASE_URL:
-        kb.add(InlineKeyboardButton("🌐 Admin Dashboard", url=f"{BASE_URL}/admin/dashboard?key={OWNER_ID}"))
-        kb.add(InlineKeyboardButton("🛠 Admin Panel", callback_data="admin:main"))
+    kb.add(
+        InlineKeyboardButton("🆕 New Project", callback_data="deploy:start"),
+        InlineKeyboardButton("📂 My Projects", callback_data="menu:my_projects"),
+    )
+    kb.add(
+        InlineKeyboardButton("💬 Help", callback_data="help"),
+        InlineKeyboardButton("⭐ Premium", callback_data="premium_info")
+    )
     return kb
 
-def register_start_handlers(dp, bot, owner_id, base_url):
-    @dp.message_handler(commands=['start'])
-    async def start_cmd(msg: types.Message):
-        await msg.answer(WELCOME, reply_markup=main_menu(msg.from_user.id))
+def register_start_handlers(dp, bot, OWNER_ID, BASE_URL):
 
-    @dp.callback_query_handler(lambda c: c.data == "menu:help")
+    @dp.message_handler(commands=["start"])
+    async def start_cmd(msg: types.Message):
+        ensure_state_user(msg.from_user.id)
+        await msg.answer(WELCOME, reply_markup=main_menu(msg.from_user.id), parse_mode="Markdown")
+
+    @dp.callback_query_handler(lambda c: c.data == "help")
     async def help_cb(c: types.CallbackQuery):
         await c.message.edit_text(
-            "📘 Help\n\n"
-            "1) New Project → send name → upload .py/.zip\n"
-            "2) My Projects → Run/Stop/Restart/Logs/File Manager/Delete\n"
-            "3) Admin Panel → owner-only controls\n",
-            reply_markup=main_menu(c.from_user.id)
+            "📘 *Help Menu*\n\n"
+            "1️⃣ Create project → Upload code (.zip/.py)\n"
+            "2️⃣ Open *My Projects* → Manage (Run/Stop/Logs)\n"
+            "3️⃣ Premium → Redeem code for 24/7\n",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup().add(
+                InlineKeyboardButton("🔙 Back", callback_data="back_home")
+            )
         )
         await c.answer()
 
-    @dp.callback_query_handler(lambda c: c.data == "menu:premium")
-    async def premium_cb(c: types.CallbackQuery):
-        text = "To get premium, contact owner or use /redeem <code> if you have a code."
-        await c.message.edit_text(text, reply_markup=main_menu(c.from_user.id))
+    @dp.callback_query_handler(lambda c: c.data == "back_home")
+    async def back_home(c: types.CallbackQuery):
+        await c.message.edit_text(WELCOME, reply_markup=main_menu(c.from_user.id), parse_mode="Markdown")
         await c.answer()
 
-    @dp.message_handler(commands=['redeem'])
-    async def redeem_cmd(msg: types.Message):
-        parts = msg.text.split(maxsplit=1)
-        if len(parts) < 2:
-            return await msg.reply("Send: /redeem CODE")
-        code = parts[1].strip()
-        ok, info = redeem_code(code, msg.from_user.id)
-        if ok:
-            await msg.reply(f"✅ Redeemed premium for {info} days.")
-        else:
-            await msg.reply(f"❌ {info}")
+    # ---------------- PREMIUM INFO ---------------- #
 
-    @dp.message_handler(commands=['generate'])
-    async def gen_cmd(msg: types.Message):
-        if msg.from_user.id != owner_id:
-            return await msg.reply("Owner only")
-        parts = msg.text.split()
-        days = 7
-        if len(parts) > 1:
-            try: days = int(parts[1])
-            except: days = 7
-        code = generate_redeem_code(days)
-        await msg.reply(f"Code: `{code}` valid for {days} days", parse_mode='Markdown')
+    @dp.callback_query_handler(lambda c: c.data == "premium_info")
+    async def premium_info(c: types.CallbackQuery):
+        text = (
+            "⭐ **Premium Benefits:**\n"
+            "• Host 10 projects\n"
+            "• 24/7 runtime\n"
+            "• Fast backups\n"
+            "• Auto-restore\n\n"
+            "👉 **To Buy Premium:** Contact @MADARAXHEREE\n\n"
+            "Already bought a code?\nTap *Redeem Premium* 👇"
+        )
+        kb = InlineKeyboardMarkup()
+        kb.add(
+            InlineKeyboardButton("🔑 Redeem Code", callback_data="redeem_menu"),
+            InlineKeyboardButton("🔙 Back", callback_data="back_home")
+        )
+        await c.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+        await c.answer()
+
+    # ---------------- REDEEM MENU ---------------- #
+
+    @dp.callback_query_handler(lambda c: c.data == "redeem_menu")
+    async def redeem_menu(c: types.CallbackQuery):
+        st = load_json()
+        st.setdefault("awaiting_redeem", {})[str(c.from_user.id)] = True
+        save_json(STATE_FILE, st)
+        await c.message.edit_text(
+            "🔑 *Send your premium redeem code now*",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup().add(
+                InlineKeyboardButton("🔙 Cancel", callback_data="back_home")
+            )
+        )
+        await c.answer()
+
+    @dp.message_handler()
+    async def redeem_or_text(msg: types.Message):
+        st = load_json()
+        if st.get("awaiting_redeem", {}).get(str(msg.from_user.id)):
+            code = msg.text.strip()
+            st["awaiting_redeem"].pop(str(msg.from_user.id), None)
+            save_json(STATE_FILE, st)
+
+            ok, res = redeem_code(code, msg.from_user.id)
+            if ok:
+                await msg.answer(f"🎉 *Premium Activated for {res} days!*\nEnjoy 24/7 runtime.", parse_mode="Markdown")
+            else:
+                await msg.answer("❌ Invalid code!", parse_mode="Markdown")
+            return
