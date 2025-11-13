@@ -1,18 +1,12 @@
-import json
-import os
-import time
-import secrets
-import shutil
+    import os, json, time, shutil, zipfile, secrets, re
+from datetime import datetime
 
-# Single source of truth for state
 STATE_FILE = "data/state.json"
 
-# ---------------- Basic JSON helpers ----------------
 
-def _ensure_dir_for(path):
-    d = os.path.dirname(path)
-    if d and not os.path.exists(d):
-        os.makedirs(d, exist_ok=True)
+# ======================================================
+#  BASIC JSON HANDLERS
+# ======================================================
 
 def load_json(path=STATE_FILE, default=None):
     if default is None:
@@ -25,238 +19,241 @@ def load_json(path=STATE_FILE, default=None):
     except Exception:
         return default
 
+
 def save_json(path, data):
-    _ensure_dir_for(path)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-# ---------------- State initialization ----------------
 
-def _ensure_state():
-    st = load_json(STATE_FILE, default={})
-    changed = False
-    if "users" not in st:
-        st["users"] = {}
-        changed = True
-    if "procs" not in st:
-        st["procs"] = {}
-        changed = True
-    if "premium_users" not in st:
-        st["premium_users"] = {}  # uid -> expiry_ts or None
-        changed = True
-    if "banned" not in st:
-        st["banned"] = []  # list of user ids
-        changed = True
-    if "redeem_codes" not in st:
-        st["redeem_codes"] = {}  # code -> {"days":N,"created":ts}
-        changed = True
-    if changed:
-        save_json(STATE_FILE, st)
+def ensure_state_user(uid):
+    """Ensure user object exists in state.json"""
+    st = load_json()
+    suid = str(uid)
+
+    st.setdefault("users", {})
+    st["users"].setdefault(suid, {})
+    st["users"][suid].setdefault("projects", [])
+
+    save_json(STATE_FILE, st)
     return st
 
-# Ensure file exists on import
-_ensure_state()
 
-# ---------------- User & project helpers ----------------
+# ======================================================
+#  PREMIUM SYSTEM (REDEEM CODES + EXPIRY)
+# ======================================================
 
-def register_user(uid):
-    """Ensure user record exists (returns state and user dict)."""
-    st = load_json(STATE_FILE, default={})
-    suid = str(uid)
-    st.setdefault("users", {})
-    if suid not in st["users"]:
-        st["users"][suid] = {"projects": [], "created": int(time.time())}
-        save_json(STATE_FILE, st)
-    return st, st["users"][suid]
+def generate_redeem_code(days):
+    """
+    Owner generates redeem code.
+    Each code is single-use and has custom validity.
+    """
+    st = load_json()
+    codes = st.setdefault("redeem_codes", {})
 
-def add_project_for_user(uid, project_name):
-    st, user = register_user(uid)
-    if project_name not in user["projects"]:
-        user["projects"].append(project_name)
-        save_json(STATE_FILE, st)
-    return user["projects"]
+    code = secrets.token_hex(8)
+    codes[code] = {
+        "days": int(days),
+        "created": int(time.time())
+    }
 
-def remove_project_for_user(uid, project_name):
-    st = load_json(STATE_FILE)
-    suid = str(uid)
-    if suid in st.get("users", {}):
-        projs = st["users"][suid].get("projects", [])
-        if project_name in projs:
-            projs.remove(project_name)
-            save_json(STATE_FILE, st)
-            # remove project folder if exists
-            proj_path = os.path.join("data", "users", suid, project_name)
-            try:
-                shutil.rmtree(proj_path, ignore_errors=True)
-            except Exception:
-                pass
-            return True
-    return False
+    save_json(STATE_FILE, st)
+    return code
 
-def list_users():
-    st = load_json(STATE_FILE)
-    return list(st.get("users", {}).keys())
 
-# ---------------- Premium helpers ----------------
+def redeem_code(code, uid):
+    """Apply premium from a redeem code."""
+    st = load_json()
+    codes = st.get("redeem_codes", {})
 
-def set_premium(uid, days=None):
-    """Set premium for user. days=None => permanent."""
-    st = load_json(STATE_FILE)
+    if code not in codes:
+        return False, "Invalid or expired code."
+
+    days = codes[code]["days"]
+    expires_at = int(time.time()) + (days * 24 * 3600)
+
     suid = str(uid)
     st.setdefault("premium_users", {})
-    if days is None:
-        st["premium_users"][suid] = None
-    else:
-        st["premium_users"][suid] = int(time.time()) + int(days) * 24 * 3600
-    save_json(STATE_FILE, st)
+    st["premium_users"][suid] = expires_at
 
-def remove_premium(uid):
-    st = load_json(STATE_FILE)
-    suid = str(uid)
-    if st.get("premium_users") and suid in st["premium_users"]:
-        del st["premium_users"][suid]
-        save_json(STATE_FILE, st)
+    # remove code after use
+    del codes[code]
+
+    save_json(STATE_FILE, st)
+    return True, days
+
 
 def is_premium(uid):
-    st = load_json(STATE_FILE)
+    """Check whether user currently premium."""
+    st = load_json()
     suid = str(uid)
+
     pu = st.get("premium_users", {})
+
     if suid not in pu:
         return False
-    exp = pu.get(suid)
-    if exp is None:
+
+    expires = pu[suid]
+
+    # permanent premium
+    if expires is None:
         return True
-    if time.time() < exp:
+
+    # still valid
+    if time.time() < expires:
         return True
-    # expired → cleanup
+
+    # expired → remove
     del pu[suid]
     save_json(STATE_FILE, st)
     return False
 
-def list_premium_users():
-    st = load_json(STATE_FILE)
-    pu = st.get("premium_users", {})
-    out = []
-    for suid, exp in pu.items():
-        if exp is None:
-            out.append({"user_id": suid, "expires": None})
-        else:
-            out.append({"user_id": suid, "expires": int(exp)})
-    return out
 
-# ---------------- Ban helpers ----------------
-
-def ban_user(uid):
-    st = load_json(STATE_FILE)
-    st.setdefault("banned", [])
+def premium_expiry(uid):
+    """Return human readable expiry string."""
+    st = load_json()
     suid = str(uid)
-    if suid not in st["banned"]:
-        st["banned"].append(suid)
-        save_json(STATE_FILE, st)
-        return True
-    return False
+    exp = st.get("premium_users", {}).get(suid)
+    if not exp:
+        return "Free User"
+    if exp is None:
+        return "Lifetime Premium"
+    return datetime.utcfromtimestamp(exp).strftime("%Y-%m-%d %H:%M:%S UTC")
 
-def unban_user(uid):
-    st = load_json(STATE_FILE)
-    suid = str(uid)
-    if suid in st.get("banned", []):
-        st["banned"].remove(suid)
-        save_json(STATE_FILE, st)
-        return True
-    return False
 
-def is_banned(uid):
-    st = load_json(STATE_FILE)
-    return str(uid) in st.get("banned", [])
+# ======================================================
+#  PATH CLEANER (IMPORTANT FOR ZIP EXTRACTION BUG)
+# ======================================================
 
-# ---------------- Redeem / codes ----------------
+def normalize_path(path):
+    """Fix double paths like /data/users/uid/proj/data/users/uid/proj"""
+    parts = path.split("/")
+    new = []
+    for p in parts:
+        if p and p not in new:
+            new.append(p)
+    return "/".join(new)
 
-def generate_redeem_code(days):
-    """Owner can generate a redeem code that gives 'days' premium when redeemed."""
-    st = load_json(STATE_FILE)
-    code = secrets.token_hex(8)
-    st.setdefault("redeem_codes", {})
-    st["redeem_codes"][code] = {"days": int(days), "created": int(time.time())}
-    save_json(STATE_FILE, st)
-    return code
 
-def redeem_code(code, uid):
-    st = load_json(STATE_FILE)
-    codes = st.get("redeem_codes", {})
-    info = codes.get(code)
-    if not info:
-        return False, "Invalid code"
-    days = info.get("days", 0)
-    # set premium
-    set_premium(uid, days=days if days > 0 else None)
-    # remove code after use
-    try:
-        del codes[code]
-        save_json(STATE_FILE, st)
-    except Exception:
-        pass
-    return True, days
-
-# ---------------- Backup / restore helpers ----------------
+# ======================================================
+#  BACKUP & RESTORE
+# ======================================================
 
 def backup_latest_path():
+    """Return path of latest backup ZIP"""
     root = "data/backups"
     if not os.path.exists(root):
         return None
-    zips = [os.path.join(root, f) for f in os.listdir(root) if f.endswith(".zip")]
-    if not zips:
+    files = [os.path.join(root, f) for f in os.listdir(root) if f.endswith(".zip")]
+    if not files:
         return None
-    zips.sort(key=lambda p: os.path.getmtime(p), reverse=True)
-    return zips[0]
+    return max(files, key=os.path.getmtime)
+
 
 def restore_from_zip(zip_path):
-    """Extract backup zip into project tree (overwrites)."""
-    import zipfile, tempfile
-    if not os.path.exists(zip_path):
-        return False, "zip not found"
-    tmp = tempfile.mkdtemp()
+    """Restore all data from backup.zip"""
+    if not zip_path or not os.path.exists(zip_path):
+        return False
+
+    tmp = "data/restore_tmp"
+    shutil.rmtree(tmp, ignore_errors=True)
+    os.makedirs(tmp, exist_ok=True)
+
     try:
         with zipfile.ZipFile(zip_path, "r") as z:
             z.extractall(tmp)
-        # Copy files back into repo root (data/ etc.)
+
+        # Move extracted folders back to /data
         for root, dirs, files in os.walk(tmp):
             for file in files:
-                src = os.path.join(root, file)
-                rel = os.path.relpath(src, tmp)
-                dest = os.path.join(".", rel)
-                _ensure_dir_for(dest)
-                shutil.copy2(src, dest)
-        return True, "restored"
-    except Exception as e:
-        return False, str(e)
+                rel = os.path.relpath(os.path.join(root, file), tmp)
+                dest = os.path.join("data", rel)
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                shutil.copy2(os.path.join(root, file), dest)
+
     finally:
-        try:
-            shutil.rmtree(tmp, ignore_errors=True)
-        except Exception:
-            pass
+        shutil.rmtree(tmp, ignore_errors=True)
 
-# ---------------- Small utilities ----------------
+    return True
 
-def user_project_count(uid):
-    st = load_json(STATE_FILE)
+
+def create_backup_zip():
+    """Return path to new backup file."""
+    ts = int(time.time())
+    out = f"data/backups/backup_{ts}.zip"
+    os.makedirs("data/backups", exist_ok=True)
+
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for folder, dirs, files in os.walk("data"):
+            for file in files:
+                fpath = os.path.join(folder, file)
+                rel = os.path.relpath(fpath, "data")
+                z.write(fpath, rel)
+
+    return out
+
+
+# ======================================================
+#  USER / PROJECT LIMIT SYSTEM
+# ======================================================
+
+def can_create_project(uid):
+    """Check free/premium project limit."""
+    st = load_json()
     suid = str(uid)
-    return len(st.get("users", {}).get(suid, {}).get("projects", []))
+    projects = st.get("users", {}).get(suid, {}).get("projects", [])
 
-def total_users():
-    st = load_json(STATE_FILE)
-    return len(st.get("users", {}))
+    if is_premium(uid):
+        return len(projects) < 10
+    return len(projects) < 2
 
-def total_projects():
-    st = load_json(STATE_FILE)
-    return sum(len(u.get("projects", [])) for u in st.get("users", {}).values())
 
-# ---------------- Convenience: ensure user & projects exist ----------------
-
-def ensure_state_user(uid):
-    st = load_json(STATE_FILE)
+def project_limit_text(uid):
+    """Return string describing remaining project slots."""
+    st = load_json()
     suid = str(uid)
-    st.setdefault("users", {}).setdefault(suid, {}).setdefault("projects", [])
-    save_json(STATE_FILE, st)
-    return st
+    projects = st.get("users", {}).get(suid, {}).get("projects", [])
 
-# ---------------- End of helpers.py ----------------
+    if is_premium(uid):
+        remaining = 10 - len(projects)
+        return f"Premium User — {remaining} of 10 slots remaining"
+    else:
+        remaining = 2 - len(projects)
+        return f"Free User — {remaining} of 2 slots remaining"
+
+
+# ======================================================
+#  PROCESS STATE CLEANUP
+# ======================================================
+
+def cleanup_stale_process(uid, proj):
+    """Remove process entry if script was killed or crashed."""
+    st = load_json()
+    suid = str(uid)
+    key = f"{proj}:entry"
+
+    if suid in st.get("procs", {}) and key in st["procs"][suid]:
+        del st["procs"][suid][key]
+        save_json(STATE_FILE, st)
+
+
+# ======================================================
+#  JSON SAFE UPDATE UTILS
+# ======================================================
+
+def add_project(uid, project_name):
+    st = ensure_state_user(uid)
+    suid = str(uid)
+    arr = st["users"][suid]["projects"]
+    if project_name not in arr:
+        arr.append(project_name)
+        save_json(STATE_FILE, st)
+
+
+def delete_project(uid, project_name):
+    st = load_json()
+    suid = str(uid)
+    arr = st.get("users", {}).get(suid, {}).get("projects", [])
+    if project_name in arr:
+        arr.remove(project_name)
+        save_json(STATE_FILE, st)
