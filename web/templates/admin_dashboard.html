@@ -1,28 +1,125 @@
 <!doctype html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>MADARA Admin Dashboard</title>
-  <style>
-    body{font-family:Arial;background:#f5f7fa;color:#222;margin:0;padding:16px}
-    .card{background:#fff;border-radius:10px;padding:12px;margin-bottom:12px;box-shadow:0 2px 6px rgba(0,0,0,0.1)}
-  </style>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🔥 GODMADARA Host Dashboard</title>
+
+<style>
+body {
+    margin: 0;
+    padding: 0;
+    background: #0c0f17;
+    color: #eee;
+    font-family: Arial, sans-serif;
+}
+.header {
+    background: #111827;
+    padding: 16px;
+    text-align: center;
+    font-size: 24px;
+    font-weight: bold;
+    border-bottom: 3px solid #7f00ff;
+}
+.card {
+    background: #111827;
+    margin: 16px;
+    padding: 16px;
+    border-radius: 12px;
+    border-left: 5px solid #7f00ff;
+}
+.title {
+    font-size: 18px;
+    margin-bottom: 10px;
+}
+.value {
+    font-size: 22px;
+    font-weight: bold;
+    color: #00eaff;
+}
+.progressBar {
+    width: 100%;
+    background: #222;
+    border-radius: 6px;
+    overflow: hidden;
+    height: 18px;
+}
+.progress {
+    height: 100%;
+    background: #00eaff;
+    width: 0%;
+}
+.footer {
+    text-align: center;
+    margin-top: 20px;
+    padding: 12px;
+    font-size: 14px;
+    color: #777;
+}
+</style>
+
 </head>
 <body>
-  <h2>🧠 MADARA HOSTING DASHBOARD</h2>
-  <div class="card">
-    <b>Total Users:</b> {{data.total_users}}<br>
-    <b>Total Projects:</b> {{data.total_projects}}<br>
-    <b>Running Scripts:</b> {{data.running}}<br>
-    <b>Last Backup:</b> {{data.last_backup}}<br>
-  </div>
-  <div class="card">
-    CPU: {{data.cpu}}%<br>
-    RAM: {{data.ram}}%<br>
-    Disk: {{data.disk}}%<br>
-  </div>
-  <script>
-    setInterval(()=>{location.reload();},5000);
-  </script>
+
+<div class="header">🧠 MADARA Admin Dashboard</div>
+
+<div class="card">
+    <div class="title">Total Users 👥</div>
+    <div id="users" class="value">loading...</div>
+</div>
+
+<div class="card">
+    <div class="title">Total Projects 📂</div>
+    <div id="projects" class="value">loading...</div>
+</div>
+
+<div class="card">
+    <div class="title">Running Scripts 🚀</div>
+    <div id="running" class="value">loading...</div>
+</div>
+
+<div class="card">
+    <div class="title">Last Backup 💾</div>
+    <div id="backup" class="value">loading...</div>
+</div>
+
+<div class="card">
+    <div class="title">Server Status ⚙️</div>
+    CPU: <span id="cpu">0%</span>
+    <div class="progressBar"><div id="cpuBar" class="progress"></div></div><br>
+    RAM: <span id="ram">0%</span>
+    <div class="progressBar"><div id="ramBar" class="progress"></div></div><br>
+    DISK: <span id="disk">0%</span>
+    <div class="progressBar"><div id="diskBar" class="progress"></div></div>
+</div>
+
+<div class="footer">Powered by @MADARAXHEREE 🥷</div>
+
+<script>
+function updateData() {
+    const params = new URLSearchParams(window.location.search);
+    const key = params.get("key");
+    fetch("/admin/dashboard/json?key=" + key)
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById("users").innerHTML = data.total_users;
+        document.getElementById("projects").innerHTML = data.total_projects;
+        document.getElementById("running").innerHTML = data.running;
+        document.getElementById("backup").innerHTML = data.last_backup;
+
+        document.getElementById("cpu").innerHTML = data.cpu + "%";
+        document.getElementById("ram").innerHTML = data.ram + "%";
+        document.getElementById("disk").innerHTML = data.disk + "%";
+
+        document.getElementById("cpuBar").style.width = data.cpu + "%";
+        document.getElementById("ramBar").style.width = data.ram + "%";
+        document.getElementById("diskBar").style.width = data.disk + "%";
+    })
+    .catch(() => console.log("Fetch Error"));
+}
+
+setInterval(updateData, 5000);
+updateData();
+</script>
+
 </body>
-</html>
+           </html>
