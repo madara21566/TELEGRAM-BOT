@@ -1,0 +1,148 @@
+<!doctype html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>File Manager - {{ proj }}</title>
+  <style>
+    body{font-family:Arial, sans-serif;background:#f5f7fa;color:#222;margin:0;padding:12px}
+    h2{margin-top:0}
+    .path{font-size:14px;margin-bottom:8px;color:#555}
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden}
+    th,td{padding:6px 8px;font-size:13px;border-bottom:1px solid #eee}
+    th{background:#f0f0f0;text-align:left}
+    .actions a{margin-right:6px;font-size:12px}
+    .card{background:#fff;border-radius:10px;padding:10px;margin-top:10px;box-shadow:0 2px 6px rgba(0,0,0,0.06)}
+    input[type=text]{width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;margin-bottom:6px}
+    textarea{width:100%;height:60vh;padding:8px;border-radius:8px;border:1px solid #ccc;font-family:monospace;font-size:13px}
+    button{padding:6px 10px;border-radius:6px;border:none;background:#007bff;color:#fff;font-size:13px;cursor:pointer}
+    button:hover{opacity:0.9}
+    .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+    .breadcrumb a{text-decoration:none;color:#007bff}
+    .breadcrumb span{color:#999;font-size:13px}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <h2>📂 {{ proj }} – File Manager</h2>
+  <div class="breadcrumb">
+    <span>Path:</span>
+    <span>/{{ path if path else '' }}</span>
+  </div>
+</div>
+
+{% if edit_mode %}
+  <div class="card">
+    <h3>✏️ Editing: {{ file_name }}</h3>
+    <form method="post" action="{{ url_for('fm_save') }}">
+      <input type="hidden" name="uid" value="{{ uid }}">
+      <input type="hidden" name="proj" value="{{ proj }}">
+      <input type="hidden" name="token" value="{{ token }}">
+      <input type="hidden" name="path" value="{{ file_name }}">
+      <textarea name="content">{{ file_content }}</textarea>
+      <br><br>
+      <button type="submit">💾 Save</button>
+      <a href="{{ url_for('file_manager', uid=uid, proj=proj, token=token, path=path) }}">🔙 Back to list</a>
+    </form>
+  </div>
+{% else %}
+
+  <div class="card">
+    {% if parent is not none %}
+      <a href="{{ url_for('file_manager', uid=uid, proj=proj, token=token, path=parent) }}">⬆️ Go Up</a>
+    {% endif %}
+  </div>
+
+  <table>
+    <tr>
+      <th>Name</th>
+      <th>Size</th>
+      <th>Modified</th>
+      <th>Actions</th>
+    </tr>
+    {% for e in entries %}
+    <tr>
+      <td>
+        {% if e.is_dir %}
+          📁 <a href="{{ url_for('file_manager', uid=uid, proj=proj, token=token, path=e.rel) }}">{{ e.name }}</a>
+        {% else %}
+          📄 {{ e.name }}
+        {% endif %}
+      </td>
+      <td>
+        {% if e.size is not none %}
+          {{ e.size }} bytes
+        {% else %}
+          -
+        {% endif %}
+      </td>
+      <td>{{ e.mtime }}</td>
+      <td class="actions">
+        {% if not e.is_dir %}
+          <a href="{{ url_for('fm_edit', uid=uid, proj=proj, token=token, path=e.rel) }}">✏️ Edit</a>
+          <a href="{{ url_for('fm_download', uid=uid, proj=proj, token=token, path=e.rel) }}">⬇️ Download</a>
+        {% else %}
+          <a href="{{ url_for('file_manager', uid=uid, proj=proj, token=token, path=e.rel) }}">📂 Open</a>
+        {% endif %}
+
+        <form style="display:inline" method="post" action="{{ url_for('fm_delete') }}">
+          <input type="hidden" name="uid" value="{{ uid }}">
+          <input type="hidden" name="proj" value="{{ proj }}">
+          <input type="hidden" name="token" value="{{ token }}">
+          <input type="hidden" name="path" value="{{ e.rel }}">
+          <button type="submit">🗑</button>
+        </form>
+
+        <form style="display:inline" method="post" action="{{ url_for('fm_rename') }}">
+          <input type="hidden" name="uid" value="{{ uid }}">
+          <input type="hidden" name="proj" value="{{ proj }}">
+          <input type="hidden" name="token" value="{{ token }}">
+          <input type="hidden" name="old_path" value="{{ e.rel }}">
+          <input type="text" name="new_name" placeholder="Rename" style="width:90px;">
+          <button type="submit">✔</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <div class="card">
+    <h3>📤 Upload File</h3>
+    <form method="post" action="{{ url_for('fm_upload') }}" enctype="multipart/form-data">
+      <input type="hidden" name="uid" value="{{ uid }}">
+      <input type="hidden" name="proj" value="{{ proj }}">
+      <input type="hidden" name="token" value="{{ token }}">
+      <input type="hidden" name="path" value="{{ path }}">
+      <input type="file" name="file">
+      <button type="submit">Upload</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>📁 New Folder</h3>
+    <form method="post" action="{{ url_for('fm_mkdir') }}">
+      <input type="hidden" name="uid" value="{{ uid }}">
+      <input type="hidden" name="proj" value="{{ proj }}">
+      <input type="hidden" name="token" value="{{ token }}">
+      <input type="hidden" name="path" value="{{ path }}">
+      <input type="text" name="name" placeholder="folder_name">
+      <button type="submit">Create</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>📄 New File</h3>
+    <form method="post" action="{{ url_for('fm_newfile') }}">
+      <input type="hidden" name="uid" value="{{ uid }}">
+      <input type="hidden" name="proj" value="{{ proj }}">
+      <input type="hidden" name="token" value="{{ token }}">
+      <input type="hidden" name="path" value="{{ path }}">
+      <input type="text" name="name" placeholder="file.py">
+      <button type="submit">Create</button>
+    </form>
+  </div>
+
+{% endif %}
+
+</body>
+</html>
