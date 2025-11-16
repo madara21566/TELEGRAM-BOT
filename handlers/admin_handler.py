@@ -6,8 +6,10 @@ from utils.helpers import load_json, backup_latest_path, restore_from_zip, list_
 from utils.backup import backup_projects
 from utils.runner import start_script, stop_script
 
+
 def _user_proj_dir(uid, proj):
     return os.path.join("data", "users", str(uid), proj)
+
 
 def _admin_kb(owner_id, base_url):
     kb = InlineKeyboardMarkup(row_width=2)
@@ -36,152 +38,167 @@ def _admin_kb(owner_id, base_url):
 
 
 def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
-
+    
+    # === MAIN ===
     @dp.callback_query_handler(lambda c: c.data == "admin:main")
     async def admin_main(c: types.CallbackQuery):
-        if c.from_user.id != OWNER_ID:
-            return await c.answer("Owner only", show_alert=True)
+        if c.from_user.id != OWNER_ID: return await c.answer("Owner only!", show_alert=True)
         await c.message.edit_text("🛠 Admin Control Panel", reply_markup=_admin_kb(OWNER_ID, BASE_URL))
         await c.answer()
 
+    # === USER LIST ===
     @dp.callback_query_handler(lambda c: c.data == "admin_user_list")
     async def users(c: types.CallbackQuery):
-        if c.from_user.id != OWNER_ID: return
         st = load_json()
         users = st.get("users", {})
-        txt = "👥 *Registered Users:*\n" + "\n".join(f"- `{x}`" for x in users.keys())
+        if not users: 
+            return await c.message.answer("No registered users!")
+        txt = "👥 *Registered Users:*\n" + "\n".join(f"`{u}`" for u in users.keys())
         await c.message.answer(txt, parse_mode="Markdown")
         await c.answer()
 
-    # ===== BROADCAST FIXED =====
+    # ===========================
+    # ✔ BROADCAST FULL FIX HERE ✔
+    # ===========================
+
     @dp.callback_query_handler(lambda c: c.data == "admin_broadcast")
-    async def ask_broadcast(c: types.CallbackQuery):
+    async def admin_broadcast(c: types.CallbackQuery):
         if c.from_user.id != OWNER_ID: return
-        await c.message.answer("📢 Send your broadcast message now:")
+        await c.message.answer("📢 Send broadcast message now\n(text/photo/document):")
         dp.register_message_handler(broadcast_handler, content_types=types.ContentType.ANY)
         await c.answer()
 
     async def broadcast_handler(msg: types.Message):
-        if msg.from_user.id != OWNER_ID: return
+        if msg.from_user.id != OWNER_ID:
+            return  # Ignore others
+
         st = load_json()
-        users = list(st.get("users", {}).keys())
+        user_list = list(st.get("users", {}).keys())
         sent = 0
-        for uid in users:
+
+        for uid in user_list:
             try:
                 if msg.text:
                     await bot.send_message(int(uid), msg.text)
                 elif msg.photo:
-                    await bot.send_photo(int(uid), msg.photo[-1].file_id)
+                    await bot.send_photo(int(uid), msg.photo[-1].file_id, caption=msg.caption or "")
                 elif msg.document:
-                    await bot.send_document(int(uid), msg.document.file_id)
+                    await bot.send_document(int(uid), msg.document.file_id, caption=msg.caption or "")
                 sent += 1
-            except: pass
+            except:
+                pass
+
+        # remove handler after work 🍫
         dp.message_handlers.unregister(broadcast_handler)
+
         await msg.reply(f"📨 Broadcast delivered to `{sent}` users.")
 
+    # ===== KEY GENERATION =====
     @dp.callback_query_handler(lambda c: c.data == "admin_genkey")
-    async def admin_genkey(c: types.CallbackQuery):
-        await c.message.answer("Use:\n`/generate <days>`\nExample: `/generate 7`", parse_mode="Markdown")
+    async def genkey(c):
+        await c.message.answer("Use `/generate <days>` Example: `/generate 7`")
         await c.answer()
 
     @dp.callback_query_handler(lambda c: c.data == "admin_keylist")
-    async def admin_keylist(c: types.CallbackQuery):
-        codes = list_redeem_codes()
-        if not codes: return await c.message.answer("No active keys.")
-        txt = "🗝 *Active Keys:*\n" + "\n".join(f"`{c}` → {i['days']} days" for c,i in codes.items())
+    async def keylist(c):
+        keys = list_redeem_codes()
+        if not keys: return await c.message.answer("No active keys.")
+        txt = "🗝 *Active Keys:*\n" + "\n".join(f"`{k}` → {i['days']} days" for k,i in keys.items())
         await c.message.answer(txt, parse_mode="Markdown")
         await c.answer()
 
+    # ===== Running Scripts =====
     @dp.callback_query_handler(lambda c: c.data == "admin_running")
-    async def admin_running(c: types.CallbackQuery):
-        st = load_json(); procs = st.get("procs",{})
-        if not procs: return await c.message.answer("No running scripts.")
-        lines=[]
+    async def run(c):
+        st = load_json()
+        procs = st.get("procs", {})
+        if not procs: return await c.message.answer("No scripts running.")
+        lines = []
         for uid,p in procs.items():
-            for key,meta in p.items():
-                proj=key.split(':')[0]
-                lines.append(f"{uid} | {proj} | pid={meta.get('pid')}")
+            for k,m in p.items():
+                proj=k.split(":")[0]
+                lines.append(f"{uid} | {proj} | pid={m.get('pid')}")
         await c.message.answer("\n".join(lines))
         await c.answer()
 
+    # ===== Backup =====
     @dp.callback_query_handler(lambda c: c.data == "admin_backup")
-    async def admin_backup(c: types.CallbackQuery):
+    async def backup(c):
         last = backup_latest_path()
-        txt = "No backups yet." if not last else f"Latest backup:\n`{last}`"
+        txt = "No backup found!" if not last else f"Latest backup: `{last}`"
         kb = InlineKeyboardMarkup()
-        kb.add(
-            InlineKeyboardButton("📦 Backup Now", callback_data="admin_backup_now"),
-            InlineKeyboardButton("📤 Restore Latest", callback_data="admin_restore_latest")
-        )
+        kb.add(InlineKeyboardButton("📦 Backup Now", callback_data="admin_backup_now"))
+        kb.add(InlineKeyboardButton("📤 Restore", callback_data="admin_restore_latest"))
         await c.message.answer(txt, reply_markup=kb, parse_mode="Markdown")
         await c.answer()
 
     @dp.callback_query_handler(lambda c: c.data == "admin_backup_now")
-    async def admin_backup_now(c: types.CallbackQuery):
+    async def manual(c):
         path = backup_projects()
-        await c.message.reply_document(open(path,"rb"), caption="Full backup created!")
+        await c.message.answer_document(open(path,"rb"), caption="Backup done ✔")
         await c.answer()
 
     @dp.callback_query_handler(lambda c: c.data == "admin_restore_latest")
-    async def admin_restore_latest(c: types.CallbackQuery):
+    async def restore(c):
         last = backup_latest_path()
-        if not last: return await c.message.answer("No backup found")
+        if not last: return await c.message.answer("Backup missing!")
         restore_from_zip(last)
-        await c.message.answer("Restored from backup.")
+        await c.message.answer("Backup restored ✔")
         await c.answer()
 
-    # ====== FIXED BUTTON CLICK ======
-    @dp.callback_query_handler(lambda c: c.data == "admin_start_script")
-    async def on_start_btn(c: types.CallbackQuery):
-        await c.message.answer("Run command:\n`/startproj <user_id> <project>`", parse_mode="Markdown")
+    # ===== Quick Menu Help for Owner Commands =====
+    @dp.callback_query_handler(lambda c: c.data.startswith("admin_"))
+    async def show_cmd(c):
+        cmds = {
+            "admin_start_script": "`/startproj <user_id> <project>`",
+            "admin_stop_script": "`/stopproj <user_id> <project>`",
+            "admin_download_script": "`/downloadproj <user_id> <project>`",
+        }
+        cmd = cmds.get(c.data)
+        if cmd:
+            await c.message.answer(f"Run command:\n{cmd}", parse_mode="Markdown")
         await c.answer()
 
-    @dp.callback_query_handler(lambda c: c.data == "admin_stop_script")
-    async def on_stop_btn(c: types.CallbackQuery):
-        await c.message.answer("Run command:\n`/stopproj <user_id> <project>`", parse_mode="Markdown")
-        await c.answer()
-
-    @dp.callback_query_handler(lambda c: c.data == "admin_download_script")
-    async def on_dl_btn(c: types.CallbackQuery):
-        await c.message.answer("Run command:\n`/downloadproj <user_id> <project>`", parse_mode="Markdown")
-        await c.answer()
-
-    # ===== OWNER COMMANDS KEEPED SAME =====
+    # === Owner commands (RUN/STOP/DOWNLOAD) ===
     @dp.message_handler(commands=['startproj'])
-    async def cmd_start(msg):
+    async def startp(msg):
         if msg.from_user.id != OWNER_ID: return
         try:
             _, uid, proj = msg.text.split()
             start_script(int(uid), proj)
-            await msg.reply(f"Started `{proj}` for `{uid}`")
-        except: await msg.reply("Usage: /startproj <user_id> <project>")
+            await msg.reply(f"Started `{proj}` for user `{uid}`")
+        except:
+            await msg.reply("❌ Usage: /startproj <uid> <project>")
 
     @dp.message_handler(commands=['stopproj'])
-    async def cmd_stop(msg):
+    async def stopp(msg):
         if msg.from_user.id != OWNER_ID: return
         try:
             _, uid, proj = msg.text.split()
             stop_script(int(uid), proj)
-            await msg.reply(f"Stopped `{proj}`")
-        except: await msg.reply("Usage: /stopproj <user_id> <project>")
+            await msg.reply(f"Stopped `{proj}` for `{uid}`")
+        except:
+            await msg.reply("❌ Usage: /stopproj <uid> <project>")
 
     @dp.message_handler(commands=['downloadproj'])
-    async def cmd_dl(msg):
+    async def dl(msg):
         if msg.from_user.id != OWNER_ID: return
         try:
             _, uid, proj = msg.text.split()
             proj_dir=_user_proj_dir(uid,proj)
             if not os.path.exists(proj_dir):
-                return await msg.reply("Not exist.")
-            tmp=f"/tmp/{uid}_{proj}.zip"
-            with zipfile.ZipFile(tmp,"w") as a:
-                for r,d,fs in os.walk(proj_dir):
+                return await msg.reply("❌ Not found.")
+            zipf=f"/tmp/{uid}_{proj}.zip"
+            with zipfile.ZipFile(zipf,"w") as z:
+                for r,_,fs in os.walk(proj_dir):
                     for f in fs:
-                        a.write(os.path.join(r,f),os.path.relpath(os.path.join(r,f),proj_dir))
-            await msg.reply_document(open(tmp,"rb"), caption="Your requested script")
-            os.remove(tmp)
-        except: await msg.reply("Usage: /downloadproj <user_id> <project>")
+                        z.write(os.path.join(r,f), os.path.relpath(os.path.join(r,f),proj_dir))
+            await msg.reply_document(open(zipf,"rb"), caption="📦 Script Exported")
+            os.remove(zipf)
+        except:
+            await msg.reply("❌ Usage: /downloadproj <uid> <project>")
 
+    # === BACK BUTTON ===
     @dp.callback_query_handler(lambda c: c.data == "main_menu")
     async def back(c):
         from handlers.start_handler import main_menu, WELCOME
