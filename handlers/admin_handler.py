@@ -43,7 +43,7 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
     async def admin_main(c: types.CallbackQuery):
         if c.from_user.id != OWNER_ID:
             return await c.answer("Owner only", show_alert=True)
-        await c.message.edit_text("🛠 Admin Control Panel", reply_markup=_admin_kb(OWNER_ID, BASE_URL))
+        await c.message.edit_text("🛠  Admin Control Panel", reply_markup=_admin_kb(OWNER_ID, BASE_URL))
         await c.answer()
 
     # =============== USER LIST ===============
@@ -155,6 +155,10 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
             InlineKeyboardButton("📦 Backup Now", callback_data="admin_backup_now"),
             InlineKeyboardButton("📤 Restore Latest", callback_data="admin_restore_latest")
         )
+        # NEW: upload backup option
+        kb.add(
+            InlineKeyboardButton("📥 Upload Backup", callback_data="admin_backup_upload")
+        )
         await c.message.answer(txt, reply_markup=kb, parse_mode="Markdown")
         await c.answer()
 
@@ -176,6 +180,35 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         restore_from_zip(last)
         await c.message.answer("Restored from backup.")
         await c.answer()
+
+    # 🔹 NEW: UPLOAD BACKUP (OWNER UPLOADS ZIP FROM BOT CHAT)
+    @dp.callback_query_handler(lambda c: c.data == "admin_backup_upload")
+    async def admin_backup_upload(c: types.CallbackQuery):
+        if c.from_user.id != OWNER_ID:
+            return
+        await c.message.answer("Send backup `.zip` file now as DOCUMENT.\nI'll restore everything from it.")
+        await c.answer()
+
+        @dp.message_handler(content_types=types.ContentType.DOCUMENT)
+        async def handle_backup_upload(msg: types.Message):
+            if msg.from_user.id != OWNER_ID:
+                return
+
+            doc = msg.document
+            if not doc.file_name.lower().endswith(".zip"):
+                return await msg.reply("Please send a `.zip` backup file.")
+
+            path = f"data/backups/uploaded_{int(time.time())}.zip"
+            await doc.download(destination_file=path)
+
+            try:
+                restore_from_zip(path)
+                await msg.reply("✅ Backup uploaded and restored.\nIf needed, restart bot on Render.")
+            except Exception as e:
+                await msg.reply(f"❌ Restore error:\n`{e}`", parse_mode="Markdown")
+
+            # unregister this upload handler so it doesn't catch every future document
+            dp.message_handlers.unregister(handle_backup_upload)
 
     # =============== START SCRIPT (BUTTON FLOW) ===============
     # Flow:
@@ -232,7 +265,7 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         await c.answer()
 
     # =============== STOP SCRIPT (BUTTON FLOW) ===============
-    # ▶ Stop Script → list users → list projects → stop_script(uid, proj)
+    # ⛔ Stop Script → list users → list projects → stop_script(uid, proj)
 
     @dp.callback_query_handler(lambda c: c.data == "admin_stop_script")
     async def admin_stop_script(c: types.CallbackQuery):
