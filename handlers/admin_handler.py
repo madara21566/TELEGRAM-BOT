@@ -1,5 +1,4 @@
 import os, time, shutil, zipfile
-
 from aiogram import types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -38,7 +37,6 @@ def _admin_kb(owner_id, base_url):
 
 def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
 
-    # MAIN
     @dp.callback_query_handler(lambda c: c.data == "admin:main")
     async def admin_main(c: types.CallbackQuery):
         if c.from_user.id != OWNER_ID:
@@ -46,19 +44,16 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         await c.message.edit_text("🛠 Admin Control Panel", reply_markup=_admin_kb(OWNER_ID, BASE_URL))
         await c.answer()
 
-    # USERS
     @dp.callback_query_handler(lambda c: c.data == "admin_user_list")
     async def users(c: types.CallbackQuery):
         if c.from_user.id != OWNER_ID: return
         st = load_json()
         users = st.get("users", {})
-        lines = ["👥 *Registered Users:*"]
-        for uid in users.keys():
-            lines.append(f"- `{uid}`")
-        await c.message.answer("\n".join(lines), parse_mode="Markdown")
+        txt = "👥 *Registered Users:*\n" + "\n".join(f"- `{x}`" for x in users.keys())
+        await c.message.answer(txt, parse_mode="Markdown")
         await c.answer()
 
-    # BROADCAST FIXED 🔥
+    # ===== BROADCAST FIXED =====
     @dp.callback_query_handler(lambda c: c.data == "admin_broadcast")
     async def ask_broadcast(c: types.CallbackQuery):
         if c.from_user.id != OWNER_ID: return
@@ -68,11 +63,9 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
 
     async def broadcast_handler(msg: types.Message):
         if msg.from_user.id != OWNER_ID: return
-
         st = load_json()
         users = list(st.get("users", {}).keys())
         sent = 0
-
         for uid in users:
             try:
                 if msg.text:
@@ -83,27 +76,22 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
                     await bot.send_document(int(uid), msg.document.file_id)
                 sent += 1
             except: pass
-
         dp.message_handlers.unregister(broadcast_handler)
         await msg.reply(f"📨 Broadcast delivered to `{sent}` users.")
 
-    # KEY GENERATION
     @dp.callback_query_handler(lambda c: c.data == "admin_genkey")
     async def admin_genkey(c: types.CallbackQuery):
-        await c.message.answer("Use `/generate <days>` to create a premium key.\nExample: `/generate 7`")
+        await c.message.answer("Use:\n`/generate <days>`\nExample: `/generate 7`", parse_mode="Markdown")
         await c.answer()
 
     @dp.callback_query_handler(lambda c: c.data == "admin_keylist")
     async def admin_keylist(c: types.CallbackQuery):
         codes = list_redeem_codes()
         if not codes: return await c.message.answer("No active keys.")
-        lines = ["🗝 *Active Keys:*"]
-        for code, info in codes.items():
-            lines.append(f"`{code}` → {info['days']} days")
-        await c.message.answer("\n".join(lines), parse_mode="Markdown")
+        txt = "🗝 *Active Keys:*\n" + "\n".join(f"`{c}` → {i['days']} days" for c,i in codes.items())
+        await c.message.answer(txt, parse_mode="Markdown")
         await c.answer()
 
-    # RUNNING SCRIPTS
     @dp.callback_query_handler(lambda c: c.data == "admin_running")
     async def admin_running(c: types.CallbackQuery):
         st = load_json(); procs = st.get("procs",{})
@@ -116,15 +104,16 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         await c.message.answer("\n".join(lines))
         await c.answer()
 
-    # BACKUP
     @dp.callback_query_handler(lambda c: c.data == "admin_backup")
     async def admin_backup(c: types.CallbackQuery):
         last = backup_latest_path()
-        text = "No backups yet." if not last else f"Latest backup: `{last}`"
+        txt = "No backups yet." if not last else f"Latest backup:\n`{last}`"
         kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton("📦 Backup Now", callback_data="admin_backup_now"))
-        kb.add(InlineKeyboardButton("📤 Restore Latest", callback_data="admin_restore_latest"))
-        await c.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+        kb.add(
+            InlineKeyboardButton("📦 Backup Now", callback_data="admin_backup_now"),
+            InlineKeyboardButton("📤 Restore Latest", callback_data="admin_restore_latest")
+        )
+        await c.message.answer(txt, reply_markup=kb, parse_mode="Markdown")
         await c.answer()
 
     @dp.callback_query_handler(lambda c: c.data == "admin_backup_now")
@@ -141,14 +130,30 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         await c.message.answer("Restored from backup.")
         await c.answer()
 
-    # === FULL OWNER CONTROL ===
+    # ====== FIXED BUTTON CLICK ======
+    @dp.callback_query_handler(lambda c: c.data == "admin_start_script")
+    async def on_start_btn(c: types.CallbackQuery):
+        await c.message.answer("Run command:\n`/startproj <user_id> <project>`", parse_mode="Markdown")
+        await c.answer()
+
+    @dp.callback_query_handler(lambda c: c.data == "admin_stop_script")
+    async def on_stop_btn(c: types.CallbackQuery):
+        await c.message.answer("Run command:\n`/stopproj <user_id> <project>`", parse_mode="Markdown")
+        await c.answer()
+
+    @dp.callback_query_handler(lambda c: c.data == "admin_download_script")
+    async def on_dl_btn(c: types.CallbackQuery):
+        await c.message.answer("Run command:\n`/downloadproj <user_id> <project>`", parse_mode="Markdown")
+        await c.answer()
+
+    # ===== OWNER COMMANDS KEEPED SAME =====
     @dp.message_handler(commands=['startproj'])
     async def cmd_start(msg):
         if msg.from_user.id != OWNER_ID: return
         try:
             _, uid, proj = msg.text.split()
             start_script(int(uid), proj)
-            await msg.reply(f"Started `{proj}` for user `{uid}`")
+            await msg.reply(f"Started `{proj}` for `{uid}`")
         except: await msg.reply("Usage: /startproj <user_id> <project>")
 
     @dp.message_handler(commands=['stopproj'])
@@ -157,7 +162,7 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         try:
             _, uid, proj = msg.text.split()
             stop_script(int(uid), proj)
-            await msg.reply(f"Stopped `{proj}` for `{uid}`")
+            await msg.reply(f"Stopped `{proj}`")
         except: await msg.reply("Usage: /stopproj <user_id> <project>")
 
     @dp.message_handler(commands=['downloadproj'])
@@ -168,15 +173,15 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
             proj_dir=_user_proj_dir(uid,proj)
             if not os.path.exists(proj_dir):
                 return await msg.reply("Not exist.")
-            z="/tmp/proj.zip"
-            with zipfile.ZipFile(z,"w") as a:
+            tmp=f"/tmp/{uid}_{proj}.zip"
+            with zipfile.ZipFile(tmp,"w") as a:
                 for r,d,fs in os.walk(proj_dir):
-                    for f in fs:a.write(os.path.join(r,f),os.path.relpath(os.path.join(r,f),proj_dir))
-            await msg.reply_document(open(z,"rb"))
-            os.remove(z)
+                    for f in fs:
+                        a.write(os.path.join(r,f),os.path.relpath(os.path.join(r,f),proj_dir))
+            await msg.reply_document(open(tmp,"rb"), caption="Your requested script")
+            os.remove(tmp)
         except: await msg.reply("Usage: /downloadproj <user_id> <project>")
 
-    # BACK BUTTON
     @dp.callback_query_handler(lambda c: c.data == "main_menu")
     async def back(c):
         from handlers.start_handler import main_menu, WELCOME
