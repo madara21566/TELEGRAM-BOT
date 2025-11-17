@@ -2,12 +2,21 @@ import os, time, shutil, zipfile
 from aiogram import types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from utils.helpers import load_json, backup_latest_path, restore_from_zip, list_redeem_codes
+from utils.helpers import (
+    load_json,
+    save_json,
+    STATE_FILE,
+    backup_latest_path,
+    restore_from_zip,
+    list_redeem_codes,
+)
 from utils.backup import backup_projects
 from utils.runner import start_script, stop_script
 
+
 def _user_proj_dir(uid, proj):
     return os.path.join("data", "users", str(uid), proj)
+
 
 def _admin_kb(owner_id, base_url):
     kb = InlineKeyboardMarkup(row_width=2)
@@ -153,11 +162,10 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         kb = InlineKeyboardMarkup()
         kb.add(
             InlineKeyboardButton("📦 Backup Now", callback_data="admin_backup_now"),
-            InlineKeyboardButton("📤 Restore Latest", callback_data="admin_restore_latest")
+            InlineKeyboardButton("📤 Restore Latest", callback_data="admin_restore_latest"),
         )
-        # NEW: upload backup option
         kb.add(
-            InlineKeyboardButton("📥 Upload Backup", callback_data="admin_backup_upload")
+            InlineKeyboardButton("📥 Upload & Restore", callback_data="admin_backup_upload"),
         )
         await c.message.answer(txt, reply_markup=kb, parse_mode="Markdown")
         await c.answer()
@@ -181,34 +189,43 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         await c.message.answer("Restored from backup.")
         await c.answer()
 
-    # 🔹 NEW: UPLOAD BACKUP (OWNER UPLOADS ZIP FROM BOT CHAT)
     @dp.callback_query_handler(lambda c: c.data == "admin_backup_upload")
     async def admin_backup_upload(c: types.CallbackQuery):
+        """Ask owner to upload a backup .zip, then restore it."""
         if c.from_user.id != OWNER_ID:
             return
-        await c.message.answer("Send backup `.zip` file now as DOCUMENT.\nI'll restore everything from it.")
+        st = load_json()
+        suid = str(c.from_user.id)
+        st.setdefault("await_backup_upload", {})[suid] = True
+        save_json(STATE_FILE, st)
+        await c.message.answer("📥 Send the backup `.zip` file now (the one bot sent you). I will restore everything from it.", parse_mode="Markdown")
         await c.answer()
 
-        @dp.message_handler(content_types=types.ContentType.DOCUMENT)
-        async def handle_backup_upload(msg: types.Message):
-            if msg.from_user.id != OWNER_ID:
-                return
+    @dp.message_handler(content_types=types.ContentType.DOCUMENT)
+    async def handle_backup_upload(msg: types.Message):
+        """Handle uploaded backup zip ONLY when owner pressed Upload & Restore."""
+        if msg.from_user.id != OWNER_ID:
+            return
+        st = load_json()
+        suid = str(msg.from_user.id)
+        waiting = st.get("await_backup_upload", {}).get(suid)
+        if not waiting:
+            # Not in backup-upload mode → let other handlers (project upload etc.) work normally
+            return
 
-            doc = msg.document
-            if not doc.file_name.lower().endswith(".zip"):
-                return await msg.reply("Please send a `.zip` backup file.")
+        # Clear flag
+        st.setdefault("await_backup_upload", {})[suid] = False
+        save_json(STATE_FILE, st)
 
-            path = f"data/backups/uploaded_{int(time.time())}.zip"
-            await doc.download(destination_file=path)
+        os.makedirs("data/backups", exist_ok=True)
+        path = f"data/backups/uploaded_{int(time.time())}.zip"
+        await msg.document.download(destination_file=path)
 
-            try:
-                restore_from_zip(path)
-                await msg.reply("✅ Backup uploaded and restored.\nIf needed, restart bot on Render.")
-            except Exception as e:
-                await msg.reply(f"❌ Restore error:\n`{e}`", parse_mode="Markdown")
-
-            # unregister this upload handler so it doesn't catch every future document
-            dp.message_handlers.unregister(handle_backup_upload)
+        try:
+            restore_from_zip(path)
+            await msg.reply("✅ Backup uploaded & restored. Please restart the bot service if needed.", parse_mode="Markdown")
+        except Exception as e:
+            await msg.reply(f"❌ Restore failed:\n`{e}`", parse_mode="Markdown")
 
     # =============== START SCRIPT (BUTTON FLOW) ===============
     # Flow:
@@ -265,7 +282,7 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         await c.answer()
 
     # =============== STOP SCRIPT (BUTTON FLOW) ===============
-    # ⛔ Stop Script → list users → list projects → stop_script(uid, proj)
+    # ▶ Stop Script → list users → list projects → stop_script(uid, proj)
 
     @dp.callback_query_handler(lambda c: c.data == "admin_stop_script")
     async def admin_stop_script(c: types.CallbackQuery):
