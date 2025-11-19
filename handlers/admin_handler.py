@@ -165,7 +165,7 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
             InlineKeyboardButton("📤 Restore Latest", callback_data="admin_restore_latest"),
         )
         kb.add(
-            InlineKeyboardButton("📥 Upload & Restore", callback_data="admin_backup_upload"),
+            InlineKeyboardButton("⬆ Upload & Restore", callback_data="admin_backup_upload"),
         )
         await c.message.answer(txt, reply_markup=kb, parse_mode="Markdown")
         await c.answer()
@@ -189,46 +189,40 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         await c.message.answer("Restored from backup.")
         await c.answer()
 
+    # ---- NEW: UPLOAD & RESTORE (OWNER SENDS ZIP) ----
+
     @dp.callback_query_handler(lambda c: c.data == "admin_backup_upload")
     async def admin_backup_upload(c: types.CallbackQuery):
-        """Ask owner to upload a backup .zip, then restore it."""
         if c.from_user.id != OWNER_ID:
             return
         st = load_json()
-        suid = str(c.from_user.id)
-        st.setdefault("await_backup_upload", {})[suid] = True
+        st["awaiting_backup_upload"] = True
         save_json(STATE_FILE, st)
-        await c.message.answer("📥 Send the backup `.zip` file now (the one bot sent you). I will restore everything from it.", parse_mode="Markdown")
+        await c.message.answer("Send your backup .zip file now as *DOCUMENT*.\nI'll restore everything from it.", parse_mode="Markdown")
         await c.answer()
 
     @dp.message_handler(content_types=types.ContentType.DOCUMENT)
     async def handle_backup_upload(msg: types.Message):
-        """Handle uploaded backup zip ONLY when owner pressed Upload & Restore."""
+        # only handle if owner + flag set
         if msg.from_user.id != OWNER_ID:
             return
         st = load_json()
-        suid = str(msg.from_user.id)
-        waiting = st.get("await_backup_upload", {}).get(suid)
-        if not waiting:
-            # Not in backup-upload mode → let other handlers (project upload etc.) work normally
-            return
-
-        # Clear flag
-        st.setdefault("await_backup_upload", {})[suid] = False
+        if not st.get("awaiting_backup_upload"):
+            return  # normal document, let other handlers process
+        # clear flag first
+        st["awaiting_backup_upload"] = False
         save_json(STATE_FILE, st)
 
         os.makedirs("data/backups", exist_ok=True)
         path = f"data/backups/uploaded_{int(time.time())}.zip"
         await msg.document.download(destination_file=path)
-
         try:
             restore_from_zip(path)
-            await msg.reply("✅ Backup uploaded & restored. Please restart the bot service if needed.", parse_mode="Markdown")
+            await msg.reply("✅ Backup uploaded and restored.\nIf needed, restart bot on Render.")
         except Exception as e:
-            await msg.reply(f"❌ Restore failed:\n`{e}`", parse_mode="Markdown")
+            await msg.reply(f"❌ Restore failed: `{e}`", parse_mode="Markdown")
 
     # =============== START SCRIPT (BUTTON FLOW) ===============
-    # Flow:
     # ▶ Start Script → list users → list projects → start_script(uid, proj)
 
     @dp.callback_query_handler(lambda c: c.data == "admin_start_script")
@@ -282,7 +276,6 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         await c.answer()
 
     # =============== STOP SCRIPT (BUTTON FLOW) ===============
-    # ▶ Stop Script → list users → list projects → stop_script(uid, proj)
 
     @dp.callback_query_handler(lambda c: c.data == "admin_stop_script")
     async def admin_stop_script(c: types.CallbackQuery):
@@ -335,7 +328,6 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         await c.answer()
 
     # =============== DOWNLOAD SCRIPT (BUTTON FLOW) ===============
-    # ⬇ Download Script → list users → list projects → send ZIP
 
     @dp.callback_query_handler(lambda c: c.data == "admin_download_script")
     async def admin_download_script(c: types.CallbackQuery):
