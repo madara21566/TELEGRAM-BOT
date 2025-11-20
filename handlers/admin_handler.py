@@ -1,4 +1,4 @@
-import os, time, shutil, zipfile
+import os, time, zipfile
 from aiogram import types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -7,10 +7,10 @@ from utils.helpers import (
     save_json,
     STATE_FILE,
     backup_latest_path,
+    restore_from_zip,
     list_redeem_codes,
 )
-# NOTE: restore_from_zip ab yahan se aa raha hai
-from utils.backup import backup_projects, restore_from_zip
+from utils.backup import backup_projects
 from utils.runner import start_script, stop_script
 
 
@@ -213,8 +213,7 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
 
         st = load_json()
         if not st.get("awaiting_backup_upload"):
-            # yeh normal document hai (project upload), isko yahan se skip karne do
-            return
+            return  # normal document (project upload), project_handler handle karega
 
         # Clear flag first
         st["awaiting_backup_upload"] = False
