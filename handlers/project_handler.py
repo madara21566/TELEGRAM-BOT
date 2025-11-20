@@ -1,15 +1,38 @@
-import os, zipfile, shutil, tempfile, time, hmac, hashlib
+# handlers/project_handler.py
+
+import os
+import zipfile
+import shutil
+import tempfile
+import time
+import hmac
+import hashlib
+import asyncio
 from datetime import datetime, timezone
 
 from aiogram import types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputFile
 
-from utils.helpers import load_json, save_json, ensure_state_user, STATE_FILE
-from utils.installer import install_requirements_if_present, detect_imports_and_install
-from utils.runner import start_script, stop_script, restart_script, read_logs, get_status
+from utils.helpers import (
+    load_json,
+    save_json,
+    ensure_state_user,
+    STATE_FILE,
+)
+from utils.installer import (
+    install_requirements_if_present,
+    detect_imports_and_install,
+)
+from utils.runner import (
+    start_script,
+    stop_script,
+    restart_script,
+    read_logs,
+    get_status,
+)
 
 BASE_URL = os.getenv("BASE_URL", "")
-OWNER_ID = None  # set in register_project_handlers
+OWNER_ID = None  # register_project_handlers me set hoga
 
 
 def _user_proj_dir(uid, proj):
@@ -19,7 +42,9 @@ def _user_proj_dir(uid, proj):
 def _fm_link(uid, proj):
     secret = (os.getenv("FILEMANAGER_SECRET") or "madara_secret_key_786").encode()
     ts = str(int(time.time()) // 3600)
-    token = hmac.new(secret, f"{uid}:{proj}:{ts}".encode(), hashlib.sha256).hexdigest()
+    token = hmac.new(
+        secret, f"{uid}:{proj}:{ts}".encode(), hashlib.sha256
+    ).hexdigest()
     return f"{BASE_URL}/fm?uid={uid}&proj={proj}&token={token}"
 
 
@@ -33,10 +58,12 @@ def project_kb(uid, proj):
     kb.add(
         InlineKeyboardButton("📜 Logs", callback_data=f"logs::{proj}"),
         InlineKeyboardButton("📂 File Manager", url=_fm_link(uid, proj)),
-        InlineKeyboardButton("🔃 Refresh", callback_data=f"status_refresh::{proj}"),
+        InlineKeyboardButton("🔄 Refresh", callback_data=f"status_refresh::{proj}"),
     )
     kb.add(
-        InlineKeyboardButton("⬇️ Download", url=f"{BASE_URL}/download/{uid}/{proj}"),
+        InlineKeyboardButton(
+            "⬇️ Download", url=f"{BASE_URL}/download/{uid}/{proj}"
+        ),
         InlineKeyboardButton("🗑 Delete", callback_data=f"delete::{proj}"),
         InlineKeyboardButton("🔙 Back", callback_data="menu:my_projects"),
     )
@@ -45,16 +72,16 @@ def project_kb(uid, proj):
 
 def status_text(uid, proj):
     st = load_json()
-    procs = st.get("procs", {}).get(str(uid), {})
+    procs_for_user = st.get("procs", {}).get(str(uid), {})
     entry = None
-    for k, v in procs.items():
+    for k, v in procs_for_user.items():
         if k.startswith(f"{proj}:"):
             entry = v
             break
 
     s = get_status(uid, proj)
-    running = s["running"]
-    pid = s["pid"] or "N/A"
+    running = s.get("running", False)
+    pid = s.get("pid") or "N/A"
 
     if entry:
         start_ts = entry.get("start", 0)
@@ -67,7 +94,7 @@ def status_text(uid, proj):
         )
         cmd = entry.get("cmd", "python3 main.py")
         return (
-            f"FASTBOT Status: `{proj}`\n\n"
+            f"FASTBOT Status for `{proj}`\n\n"
             f"Status: {'🟢 Running' if running else '🔴 Stopped'}\n"
             f"PID: `{pid}`\n"
             f"Uptime: `{h:02d}:{m:02d}:{s2:02d}`\n"
@@ -76,12 +103,12 @@ def status_text(uid, proj):
         )
     else:
         return (
-            f"FASTBOT Status: `{proj}`\n\n"
+            f"FASTBOT Status for `{proj}`\n\n"
             f"Status: {'🟢 Running' if running else '🔴 Stopped'}\n"
             f"PID: `{pid if running else 'N/A'}`\n"
             f"Uptime: `N/A`\n"
             f"Last Run: `Never`\n"
-            f"Run Command: auto-detected"
+            f"Run Command: `auto-detected`"
         )
 
 
@@ -96,7 +123,8 @@ async def _clean_progress(messages):
 def _extract_zip(zip_path, dest):
     with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(dest)
-    # flatten single top folder
+
+    # Agar zip ke andar ek hi root folder ho toh usko flatten kar do
     while True:
         items = os.listdir(dest)
         if len(items) == 1 and os.path.isdir(os.path.join(dest, items[0])):
@@ -113,59 +141,70 @@ def register_project_handlers(dp, bot, owner_id, base_url):
     BASE_URL = base_url
     OWNER_ID = owner_id
 
-    # =============== NEW PROJECT FLOW ===============
+    # -------------- NEW PROJECT START --------------
 
     @dp.callback_query_handler(lambda c: c.data == "deploy:start")
     async def start_deploy(c: types.CallbackQuery):
         st = ensure_state_user(c.from_user.id)
-        st.setdefault("awaiting_name", {})[str(c.from_user.id)] = True
+        awaiting = st.setdefault("awaiting_name", {})
+        awaiting[str(c.from_user.id)] = True
         save_json(STATE_FILE, st)
-        await c.message.edit_text(
-            "Send your project name:",
-            reply_markup=InlineKeyboardMarkup().add(
-                InlineKeyboardButton("🔙 Back", callback_data="menu:my_projects")
-            ),
+
+        kb = InlineKeyboardMarkup().add(
+            InlineKeyboardButton("🔙 Back", callback_data="menu:my_projects")
         )
+        await c.message.edit_text("Send your project name:", reply_markup=kb)
         await c.answer()
 
     @dp.message_handler(content_types=types.ContentType.TEXT)
     async def receive_name(msg: types.Message):
         st = load_json()
-        if st.get("awaiting_name", {}).get(str(msg.from_user.id)):
-            name = msg.text.strip().replace(" ", "_")
-            st["awaiting_name"].pop(str(msg.from_user.id), None)
-            st.setdefault("users", {}).setdefault(str(msg.from_user.id), {}).setdefault(
-                "projects", []
-            )
+        if not st.get("awaiting_name", {}).get(str(msg.from_user.id)):
+            return
 
-            # Free / Premium project limit
-            is_prem = str(msg.from_user.id) in st.get("premium_users", {})
-            limit = 10 if is_prem else 2
-            if len(st["users"][str(msg.from_user.id)]["projects"]) >= limit:
-                return await msg.answer("⚠️ Project limit reached. Upgrade to premium.")
+        name = msg.text.strip().replace(" ", "_")
+        st["awaiting_name"].pop(str(msg.from_user.id), None)
 
-            if name not in st["users"][str(msg.from_user.id)]["projects"]:
-                st["users"][str(msg.from_user.id)]["projects"].append(name)
-            save_json(STATE_FILE, st)
-            os.makedirs(_user_proj_dir(msg.from_user.id, name), exist_ok=True)
-            await msg.answer(
-                f"✅ Project `{name}` created.\nNow send `.py` or `.zip` as *DOCUMENT*.",
-                parse_mode="Markdown",
-            )
+        users = st.setdefault("users", {})
+        u = users.setdefault(str(msg.from_user.id), {})
+        projects = u.setdefault("projects", [])
 
-    # =============== PROJECT UPLOAD (DOCUMENT) ===============
-    # 👉 yahan tumhara requested guard laga hai
+        # free/premium limit
+        is_prem = str(msg.from_user.id) in st.get("premium_users", {})
+        limit = 10 if is_prem else 2
+        if len(projects) >= limit:
+            return await msg.answer("⚠️ Project limit reached. Upgrade to premium.")
+
+        if name not in projects:
+            projects.append(name)
+
+        save_json(STATE_FILE, st)
+        os.makedirs(_user_proj_dir(msg.from_user.id, name), exist_ok=True)
+
+        await msg.answer(
+            f"✅ Project `{name}` created.\n"
+            f"Now send your `.py` or `.zip` file as DOCUMENT.",
+            parse_mode="Markdown",
+        )
+
+    # -------------- PROJECT / BACKUP DOCUMENT UPLOAD --------------
 
     @dp.message_handler(content_types=types.ContentType.DOCUMENT)
     async def receive_doc(msg: types.Message):
-        # 🔥 ignore project upload jab admin backup upload mode me ho
+        """
+        Yahin pe do kaam hote hain:
+        1) Agar admin backup upload mode ON ho → project upload ignore, admin_handler handle karega.
+        2) Warna ye normal project upload handle karega.
+        """
         st = load_json()
+
+        # 🔥 1) Backup upload mode: isko yahan se skip karo, admin_handler handle karega
         if st.get("awaiting_backup_upload") and msg.from_user.id == OWNER_ID:
-            # is document ko admin_handler wala handle_backup_upload lega
+            # NOTE: is message ko admin_handler.handle_backup_upload hi process karega
             return
 
+        # 2) Normal project upload
         uid = msg.from_user.id
-        st = load_json()
         projects = st.get("users", {}).get(str(uid), {}).get("projects", [])
         if not projects:
             await msg.reply("Create a project first with New Project.")
@@ -185,41 +224,68 @@ def register_project_handlers(dp, bot, owner_id, base_url):
                 _extract_zip(filepath, base)
                 os.remove(filepath)
             except Exception as e:
-                await msg.reply(f"Zip error: {e}")
+                await msg.reply(f"Zip error: `{e}`", parse_mode="Markdown")
                 return
 
         m3 = await msg.reply("⚙️ Installing dependencies...")
 
-        # requirements.txt or auto-detect imports
-        req = os.path.join(base, "requirements.txt")
-        try:
-            if os.path.exists(req):
-                install_requirements_if_present(base)
+        # Heavy work ko background thread me daal dete hain taaki bot freeze na ho
+        loop = asyncio.get_event_loop()
+
+        async def _install():
+            if os.path.exists(os.path.join(base, "requirements.txt")):
+                await loop.run_in_executor(
+                    None, install_requirements_if_present, base
+                )
             else:
-                # first .py file
-                py_file = None
+                py = None
                 for n in os.listdir(base):
                     if n.endswith(".py"):
-                        py_file = os.path.join(base, n)
+                        py = os.path.join(base, n)
                         break
-                if py_file:
-                    detect_imports_and_install(py_file)
+                if py:
+                    await loop.run_in_executor(
+                        None, detect_imports_and_install, py
+                    )
+
+        try:
+            await _install()
         except Exception as e:
-            await msg.reply(f"Dependency install error: `{e}`", parse_mode="Markdown")
+            await msg.reply(f"Deps install error: `{e}`", parse_mode="Markdown")
 
         await _clean_progress([m1, m2, m3])
-        await msg.reply(
-            "🎉 Upload complete!\nGo to *MY PROJECTS* to run and manage.",
-            parse_mode="Markdown",
+
+        # --- Upload complete message ko spam se bachao ---
+        st = load_json()
+        lu = st.setdefault("last_upload_msg_ts", {})
+        now = int(time.time())
+        last_ts = int(lu.get(str(uid), 0))
+
+        kb = InlineKeyboardMarkup().add(
+            InlineKeyboardButton("📂 MY PROJECTS", callback_data="menu:my_projects")
         )
 
-    # =============== MY PROJECTS MENU ===============
+        # Agar 10 second ke andar already message bhej diya tha toh dobara mat bhejo
+        if now - last_ts > 10:
+            lu[str(uid)] = now
+            save_json(STATE_FILE, st)
+            await msg.reply(
+                "🎉 Upload complete!\nGo to *MY PROJECTS* to run and manage.",
+                parse_mode="Markdown",
+                reply_markup=kb,
+            )
+        else:
+            # sirf quietly update timestamp, extra spam nahi
+            lu[str(uid)] = now
+            save_json(STATE_FILE, st)
+
+    # -------------- MY PROJECTS MENU --------------
 
     @dp.callback_query_handler(lambda c: c.data == "menu:my_projects")
     async def my_projects(c: types.CallbackQuery):
         st = load_json()
-        projs = (
-            st.get("users", {}).get(str(c.from_user.id), {}).get("projects", [])
+        projs = st.get("users", {}).get(str(c.from_user.id), {}).get(
+            "projects", []
         )
         kb = InlineKeyboardMarkup(row_width=1)
         for p in projs:
@@ -234,6 +300,7 @@ def register_project_handlers(dp, bot, owner_id, base_url):
         await c.message.edit_text(
             status_text(c.from_user.id, proj),
             reply_markup=project_kb(c.from_user.id, proj),
+            parse_mode="Markdown",
         )
         await c.answer()
 
@@ -243,10 +310,11 @@ def register_project_handlers(dp, bot, owner_id, base_url):
         await c.message.edit_text(
             status_text(c.from_user.id, proj),
             reply_markup=project_kb(c.from_user.id, proj),
+            parse_mode="Markdown",
         )
         await c.answer("Refreshed")
 
-    # =============== RUN / STOP / RESTART ===============
+    # -------------- RUN / STOP / RESTART / LOGS / DELETE --------------
 
     @dp.callback_query_handler(lambda c: c.data and c.data.startswith("run::"))
     async def run_cb(c: types.CallbackQuery):
@@ -256,29 +324,35 @@ def register_project_handlers(dp, bot, owner_id, base_url):
         try:
             start_script(uid, proj, None)
             await c.message.answer(
-                status_text(uid, proj), reply_markup=project_kb(uid, proj)
+                status_text(uid, proj),
+                reply_markup=project_kb(uid, proj),
+                parse_mode="Markdown",
             )
         except Exception as e:
-            await c.message.answer(f"Start error: {e}")
+            await c.message.answer(f"Start error: `{e}`", parse_mode="Markdown")
         await c.answer()
 
     @dp.callback_query_handler(lambda c: c.data and c.data.startswith("stop::"))
     async def stop_cb(c: types.CallbackQuery):
         uid = c.from_user.id
         proj = c.data.split("::", 1)[1]
-        stop_script(uid, proj)
-        await c.message.answer("⛔ Stopped.")
+        try:
+            stop_script(uid, proj)
+            await c.message.answer("⛔ Stopped.")
+        except Exception as e:
+            await c.message.answer(f"Stop error: `{e}`", parse_mode="Markdown")
         await c.answer()
 
     @dp.callback_query_handler(lambda c: c.data and c.data.startswith("restart::"))
     async def restart_cb(c: types.CallbackQuery):
         uid = c.from_user.id
         proj = c.data.split("::", 1)[1]
-        restart_script(uid, proj, None)
-        await c.message.answer("🔁 Restarted.")
+        try:
+            restart_script(uid, proj, None)
+            await c.message.answer("🔁 Restarted.")
+        except Exception as e:
+            await c.message.answer(f"Restart error: `{e}`", parse_mode="Markdown")
         await c.answer()
-
-    # =============== LOGS ===============
 
     @dp.callback_query_handler(lambda c: c.data and c.data.startswith("logs::"))
     async def logs_cb(c: types.CallbackQuery):
@@ -287,14 +361,12 @@ def register_project_handlers(dp, bot, owner_id, base_url):
         content = read_logs(uid, proj, lines=500)
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
         with open(tmp.name, "w", encoding="utf-8") as f:
-            f.write(content)
+            f.write(content or "")
         await c.message.answer_document(
             InputFile(tmp.name, filename=f"{proj}_logs.txt")
         )
         os.unlink(tmp.name)
         await c.answer()
-
-    # =============== DELETE PROJECT ===============
 
     @dp.callback_query_handler(lambda c: c.data and c.data.startswith("delete::"))
     async def delete_cb(c: types.CallbackQuery):
@@ -329,10 +401,8 @@ def register_project_handlers(dp, bot, owner_id, base_url):
                 f"🗑 Project `{proj}` deleted.", parse_mode="Markdown"
             )
         except Exception as e:
-            await c.message.edit_text(f"Delete failed: {e}")
+            await c.message.edit_text(f"Delete failed: `{e}`", parse_mode="Markdown")
         await c.answer()
-
-    # =============== BACK HOME ===============
 
     @dp.callback_query_handler(lambda c: c.data == "back_home")
     async def back_home(c: types.CallbackQuery):
