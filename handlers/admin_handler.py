@@ -77,7 +77,7 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         if c.from_user.id != OWNER_ID:
             return
         await c.message.answer("📢 Send your broadcast message now (text / photo / document):")
-        # register one-time handler
+        # one-time handler
         dp.register_message_handler(broadcast_handler, content_types=types.ContentType.ANY)
         await c.answer()
 
@@ -162,7 +162,7 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         kb = InlineKeyboardMarkup()
         kb.add(
             InlineKeyboardButton("📦 Backup Now", callback_data="admin_backup_now"),
-            InlineKeyboardButton("📤 Restore Latest", callback_data="admin_restore_latest"),
+            InlineKeyboardButton("♻ Restore Latest", callback_data="admin_restore_latest"),
         )
         kb.add(
             InlineKeyboardButton("⬆ Upload & Restore", callback_data="admin_backup_upload"),
@@ -189,7 +189,7 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         await c.message.answer("Restored from backup.")
         await c.answer()
 
-    # ---- NEW: UPLOAD & RESTORE (OWNER SENDS ZIP) ----
+    # ---- UPLOAD & RESTORE (OWNER SENDS ZIP) ----
 
     @dp.callback_query_handler(lambda c: c.data == "admin_backup_upload")
     async def admin_backup_upload(c: types.CallbackQuery):
@@ -198,18 +198,24 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         st = load_json()
         st["awaiting_backup_upload"] = True
         save_json(STATE_FILE, st)
-        await c.message.answer("Send your backup .zip file now as *DOCUMENT*.\nI'll restore everything from it.", parse_mode="Markdown")
+        await c.message.answer(
+            "Send your backup `.zip` file now as *DOCUMENT*.\n"
+            "I'll restore everything from it.",
+            parse_mode="Markdown"
+        )
         await c.answer()
 
     @dp.message_handler(content_types=types.ContentType.DOCUMENT)
     async def handle_backup_upload(msg: types.Message):
-        # only handle if owner + flag set
+        # Only owner + when flag is set
         if msg.from_user.id != OWNER_ID:
             return
+
         st = load_json()
         if not st.get("awaiting_backup_upload"):
-            return  # normal document, let other handlers process
-        # clear flag first
+            return  # normal document (e.g. project upload), let other handlers manage
+
+        # Clear flag first
         st["awaiting_backup_upload"] = False
         save_json(STATE_FILE, st)
 
@@ -223,7 +229,6 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
             await msg.reply(f"❌ Restore failed: `{e}`", parse_mode="Markdown")
 
     # =============== START SCRIPT (BUTTON FLOW) ===============
-    # ▶ Start Script → list users → list projects → start_script(uid, proj)
 
     @dp.callback_query_handler(lambda c: c.data == "admin_start_script")
     async def admin_start_script(c: types.CallbackQuery):
