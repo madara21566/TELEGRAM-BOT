@@ -9,8 +9,8 @@ from utils.helpers import (
     backup_latest_path,
     list_redeem_codes,
 )
-from utils.helpers import restore_from_zip
-from utils.backup import backup_projects
+# NOTE: restore_from_zip ab yahan se aa raha hai
+from utils.backup import backup_projects, restore_from_zip
 from utils.runner import start_script, stop_script
 
 
@@ -213,7 +213,8 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
 
         st = load_json()
         if not st.get("awaiting_backup_upload"):
-            return  # normal document (e.g. project upload), let other handlers manage
+            # yeh normal document hai (project upload), isko yahan se skip karne do
+            return
 
         # Clear flag first
         st["awaiting_backup_upload"] = False
