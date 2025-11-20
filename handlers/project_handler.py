@@ -1,13 +1,15 @@
 import os, zipfile, shutil, tempfile, time, hmac, hashlib
 from datetime import datetime, timezone
+
 from aiogram import types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputFile
+
 from utils.helpers import load_json, save_json, ensure_state_user, STATE_FILE
 from utils.installer import install_requirements_if_present, detect_imports_and_install
 from utils.runner import start_script, stop_script, restart_script, read_logs, get_status
 
 BASE_URL = os.getenv("BASE_URL", "")
-OWNER_ID = None  # will be set in register_project_handlers
+OWNER_ID = None  # set in register_project_handlers
 
 
 def _user_proj_dir(uid, proj):
@@ -31,7 +33,7 @@ def project_kb(uid, proj):
     kb.add(
         InlineKeyboardButton("📜 Logs", callback_data=f"logs::{proj}"),
         InlineKeyboardButton("📂 File Manager", url=_fm_link(uid, proj)),
-        InlineKeyboardButton("🔄 Refresh", callback_data=f"status_refresh::{proj}"),
+        InlineKeyboardButton("🔃 Refresh", callback_data=f"status_refresh::{proj}"),
     )
     kb.add(
         InlineKeyboardButton("⬇️ Download", url=f"{BASE_URL}/download/{uid}/{proj}"),
@@ -49,9 +51,11 @@ def status_text(uid, proj):
         if k.startswith(f"{proj}:"):
             entry = v
             break
+
     s = get_status(uid, proj)
     running = s["running"]
     pid = s["pid"] or "N/A"
+
     if entry:
         start_ts = entry.get("start", 0)
         uptime = int(time.time() - start_ts) if start_ts else 0
@@ -63,21 +67,21 @@ def status_text(uid, proj):
         )
         cmd = entry.get("cmd", "python3 main.py")
         return (
-            f"Project Status for {proj}\n\n"
-            f"🔹 Status: {'🟢 Running' if running else '🔴 Stopped'}\n"
-            f"🔹 PID: {pid}\n"
-            f"🔹 Uptime: {h:02d}:{m:02d}:{s2:02d}\n"
-            f"🔹 Last Run: {last_run}\n"
-            f"🔹 Run Command: {cmd}"
+            f"FASTBOT Status: `{proj}`\n\n"
+            f"Status: {'🟢 Running' if running else '🔴 Stopped'}\n"
+            f"PID: `{pid}`\n"
+            f"Uptime: `{h:02d}:{m:02d}:{s2:02d}`\n"
+            f"Last Run: `{last_run}`\n"
+            f"Run Command: `{cmd}`"
         )
     else:
         return (
-            f"Project Status for {proj}\n\n"
-            f"🔹 Status: {'🟢 Running' if running else '🔴 Stopped'}\n"
-            f"🔹 PID: {pid if running else 'N/A'}\n"
-            f"🔹 Uptime: {'N/A' if not running else '00:00:00'}\n"
-            f"🔹 Last Run: Never\n"
-            f"🔹 Run Command: auto-detected"
+            f"FASTBOT Status: `{proj}`\n\n"
+            f"Status: {'🟢 Running' if running else '🔴 Stopped'}\n"
+            f"PID: `{pid if running else 'N/A'}`\n"
+            f"Uptime: `N/A`\n"
+            f"Last Run: `Never`\n"
+            f"Run Command: auto-detected"
         )
 
 
@@ -89,10 +93,27 @@ async def _clean_progress(messages):
             pass
 
 
+def _extract_zip(zip_path, dest):
+    with zipfile.ZipFile(zip_path, "r") as z:
+        z.extractall(dest)
+    # flatten single top folder
+    while True:
+        items = os.listdir(dest)
+        if len(items) == 1 and os.path.isdir(os.path.join(dest, items[0])):
+            inner = os.path.join(dest, items[0])
+            for fn in os.listdir(inner):
+                shutil.move(os.path.join(inner, fn), os.path.join(dest, fn))
+            shutil.rmtree(inner, ignore_errors=True)
+        else:
+            break
+
+
 def register_project_handlers(dp, bot, owner_id, base_url):
     global BASE_URL, OWNER_ID
     BASE_URL = base_url
     OWNER_ID = owner_id
+
+    # =============== NEW PROJECT FLOW ===============
 
     @dp.callback_query_handler(lambda c: c.data == "deploy:start")
     async def start_deploy(c: types.CallbackQuery):
@@ -116,39 +137,31 @@ def register_project_handlers(dp, bot, owner_id, base_url):
             st.setdefault("users", {}).setdefault(str(msg.from_user.id), {}).setdefault(
                 "projects", []
             )
-            # project limit free/premium
+
+            # Free / Premium project limit
             is_prem = str(msg.from_user.id) in st.get("premium_users", {})
             limit = 10 if is_prem else 2
             if len(st["users"][str(msg.from_user.id)]["projects"]) >= limit:
                 return await msg.answer("⚠️ Project limit reached. Upgrade to premium.")
+
             if name not in st["users"][str(msg.from_user.id)]["projects"]:
                 st["users"][str(msg.from_user.id)]["projects"].append(name)
             save_json(STATE_FILE, st)
             os.makedirs(_user_proj_dir(msg.from_user.id, name), exist_ok=True)
             await msg.answer(
-                f"✅ Project `{name}` created. Send .py or .zip as DOCUMENT.",
+                f"✅ Project `{name}` created.\nNow send `.py` or `.zip` as *DOCUMENT*.",
                 parse_mode="Markdown",
             )
 
-    def _extract_zip(zip_path, dest):
-        with zipfile.ZipFile(zip_path, "r") as z:
-            z.extractall(dest)
-        while True:
-            items = os.listdir(dest)
-            if len(items) == 1 and os.path.isdir(os.path.join(dest, items[0])):
-                inner = os.path.join(dest, items[0])
-                for fn in os.listdir(inner):
-                    shutil.move(os.path.join(inner, fn), os.path.join(dest, fn))
-                shutil.rmtree(inner, ignore_errors=True)
-            else:
-                break
+    # =============== PROJECT UPLOAD (DOCUMENT) ===============
+    # 👉 yahan tumhara requested guard laga hai
 
     @dp.message_handler(content_types=types.ContentType.DOCUMENT)
     async def receive_doc(msg: types.Message):
-        # 🔥 FIX: ignore project upload when we are in backup upload mode
+        # 🔥 ignore project upload jab admin backup upload mode me ho
         st = load_json()
         if st.get("awaiting_backup_upload") and msg.from_user.id == OWNER_ID:
-            # let admin_handler handle this document as backup
+            # is document ko admin_handler wala handle_backup_upload lega
             return
 
         uid = msg.from_user.id
@@ -158,13 +171,14 @@ def register_project_handlers(dp, bot, owner_id, base_url):
             await msg.reply("Create a project first with New Project.")
             return
 
-        proj = projects[-1]
+        proj = projects[-1]  # last created project
         base = _user_proj_dir(uid, proj)
         os.makedirs(base, exist_ok=True)
 
-        m1 = await msg.reply("📦 Processing project...")
+        m1 = await msg.reply("📥 Processing project...")
         filepath = os.path.join(base, msg.document.file_name)
         await msg.document.download(destination_file=filepath)
+
         m2 = await msg.reply("🔧 Extracting / saving files...")
         if filepath.lower().endswith(".zip"):
             try:
@@ -173,26 +187,33 @@ def register_project_handlers(dp, bot, owner_id, base_url):
             except Exception as e:
                 await msg.reply(f"Zip error: {e}")
                 return
+
         m3 = await msg.reply("⚙️ Installing dependencies...")
-        if os.path.exists(os.path.join(base, "requirements.txt")):
-            from utils.installer import install_requirements_if_present
 
-            install_requirements_if_present(base)
-        else:
-            py = None
-            for n in os.listdir(base):
-                if n.endswith(".py"):
-                    py = os.path.join(base, n)
-                    break
-            if py:
-                from utils.installer import detect_imports_and_install
+        # requirements.txt or auto-detect imports
+        req = os.path.join(base, "requirements.txt")
+        try:
+            if os.path.exists(req):
+                install_requirements_if_present(base)
+            else:
+                # first .py file
+                py_file = None
+                for n in os.listdir(base):
+                    if n.endswith(".py"):
+                        py_file = os.path.join(base, n)
+                        break
+                if py_file:
+                    detect_imports_and_install(py_file)
+        except Exception as e:
+            await msg.reply(f"Dependency install error: `{e}`", parse_mode="Markdown")
 
-                detect_imports_and_install(py)
         await _clean_progress([m1, m2, m3])
         await msg.reply(
-            "🎉 Upload complete! Go to MY PROJECTS to run and manage.",
+            "🎉 Upload complete!\nGo to *MY PROJECTS* to run and manage.",
             parse_mode="Markdown",
         )
+
+    # =============== MY PROJECTS MENU ===============
 
     @dp.callback_query_handler(lambda c: c.data == "menu:my_projects")
     async def my_projects(c: types.CallbackQuery):
@@ -225,6 +246,8 @@ def register_project_handlers(dp, bot, owner_id, base_url):
         )
         await c.answer("Refreshed")
 
+    # =============== RUN / STOP / RESTART ===============
+
     @dp.callback_query_handler(lambda c: c.data and c.data.startswith("run::"))
     async def run_cb(c: types.CallbackQuery):
         uid = c.from_user.id
@@ -255,6 +278,8 @@ def register_project_handlers(dp, bot, owner_id, base_url):
         await c.message.answer("🔁 Restarted.")
         await c.answer()
 
+    # =============== LOGS ===============
+
     @dp.callback_query_handler(lambda c: c.data and c.data.startswith("logs::"))
     async def logs_cb(c: types.CallbackQuery):
         uid = c.from_user.id
@@ -268,6 +293,8 @@ def register_project_handlers(dp, bot, owner_id, base_url):
         )
         os.unlink(tmp.name)
         await c.answer()
+
+    # =============== DELETE PROJECT ===============
 
     @dp.callback_query_handler(lambda c: c.data and c.data.startswith("delete::"))
     async def delete_cb(c: types.CallbackQuery):
@@ -304,6 +331,8 @@ def register_project_handlers(dp, bot, owner_id, base_url):
         except Exception as e:
             await c.message.edit_text(f"Delete failed: {e}")
         await c.answer()
+
+    # =============== BACK HOME ===============
 
     @dp.callback_query_handler(lambda c: c.data == "back_home")
     async def back_home(c: types.CallbackQuery):
