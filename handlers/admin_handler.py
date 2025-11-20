@@ -158,25 +158,24 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         if c.from_user.id != OWNER_ID:
             return
         last = backup_latest_path()
-        txt = "No backups yet." if not last else f"Latest backup:\n`{last}`"
+        txt = (
+            "No backups yet."
+            if not last
+            else f"Latest local backup file:\n`{last}`\n\n"
+                 "ℹ️ Google Drive auto-backup is running every 10 minutes."
+        )
         kb = InlineKeyboardMarkup()
+        # ❌ Manual "Backup Now" hata diya (auto backup already)
         kb.add(
-            InlineKeyboardButton("📦 Backup Now", callback_data="admin_backup_now"),
             InlineKeyboardButton("♻ Restore Latest", callback_data="admin_restore_latest"),
         )
         kb.add(
-            InlineKeyboardButton("⬆ Upload & Restore", callback_data="admin_backup_upload"),
+            InlineKeyboardButton("⬆️ Upload & Restore", callback_data="admin_backup_upload"),
         )
         await c.message.answer(txt, reply_markup=kb, parse_mode="Markdown")
         await c.answer()
 
-    @dp.callback_query_handler(lambda c: c.data == "admin_backup_now")
-    async def admin_backup_now(c: types.CallbackQuery):
-        if c.from_user.id != OWNER_ID:
-            return
-        path = backup_projects()
-        await c.message.reply_document(open(path, "rb"), caption="Full backup created!")
-        await c.answer()
+    # ❌ admin_backup_now REMOVED (manual backup button) – Google Drive auto-backup handle karega
 
     @dp.callback_query_handler(lambda c: c.data == "admin_restore_latest")
     async def admin_restore_latest(c: types.CallbackQuery):
@@ -186,7 +185,7 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
         if not last:
             return await c.message.answer("No backup found")
         restore_from_zip(last)
-        await c.message.answer("Restored from backup.")
+        await c.message.answer("Restored from latest local backup.")
         await c.answer()
 
     # ---- UPLOAD & RESTORE (OWNER SENDS ZIP) ----
@@ -213,7 +212,7 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
 
         st = load_json()
         if not st.get("awaiting_backup_upload"):
-            return  # normal document (e.g. project upload), let other handlers manage
+            return  # normal document (project upload), project_handler handle karega
 
         # Clear flag first
         st["awaiting_backup_upload"] = False
