@@ -1,8 +1,13 @@
-# main.pyimport os
+import os
 import logging
 import threading
 import time
+import asyncio
+from aiogram import Bot, Dispatcher
+from aiogram.utils import executor
+from dotenv import load_dotenv
 
+load_dotenv()
 from aiogram import Bot, Dispatcher
 from aiogram.utils import executor
 from dotenv import load_dotenv
