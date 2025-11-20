@@ -1,31 +1,41 @@
-import os
-import time
-from pydrive2.auth import GoogleAuth
-from pydrive2.drive import GoogleDrive
+import os, time, zipfile
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
 
-def upload_to_drive(file_path):
-    try:
-        gauth = GoogleAuth()
-        gauth.LoadCredentialsFile("data/google_credentials.json")
+SCOPES = ['https://www.googleapis.com/auth/drive.file']
+SERVICE_ACCOUNT_FILE = "credentials.json"
+FOLDER_ID = os.getenv("DRIVE_FOLDER_ID")
 
-        if gauth.credentials is None:
-            return False
-        elif gauth.access_token_expired:
-            gauth.Refresh()
-        else:
-            gauth.Authorize()
+def create_zip():
+    path = f"data_backup_{int(time.time())}.zip"
+    if os.path.exists(path): os.remove(path)
 
-        drive = GoogleDrive(gauth)
+    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as z:
+        for root, _, files in os.walk('data'):
+            for f in files:
+                full_path = os.path.join(root, f)
+                z.write(full_path, os.path.relpath(full_path, 'data'))
+    return path
 
-        file = drive.CreateFile({
-            'title': os.path.basename(file_path),
-            'parents': [{'id': os.getenv("GDRIVE_FOLDER_ID")}]
-        })
-        file.SetContentFile(file_path)
-        file.Upload()
+def upload_to_drive():
+    creds = Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE, scopes=SCOPES
+    )
+    service = build('drive', 'v3', credentials=creds)
 
-        return True
+    file_path = create_zip()
+    file_name = os.path.basename(file_path)
 
-    except Exception as e:
-        print(f"GDrive Upload Error: {e}")
-        return False
+    file_metadata = {
+        "name": file_name,
+        "parents": [FOLDER_ID]
+    }
+    media = MediaFileUpload(file_path, mimetype='application/zip')
+
+    file = service.files().create(
+        body=file_metadata,
+        media_body=media,
+        fields="id"
+    ).execute()
+    print("Backup uploaded:", file.get("id"))
+    return file_path
