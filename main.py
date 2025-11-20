@@ -1,16 +1,38 @@
-# main.py
-
-import os
+# main.pyimport os
 import logging
 import threading
 import time
-import asyncio
 
 from aiogram import Bot, Dispatcher
 from aiogram.utils import executor
 from dotenv import load_dotenv
 
+# .env se values load karo
+load_dotenv()
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+OWNER_ID = int(os.getenv("OWNER_ID", "0"))
+BASE_URL = os.getenv("BASE_URL", "")
+PORT = int(os.getenv("PORT", "10000"))
+
+# --------- BASIC LOGGING ---------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+logging.getLogger("aiogram").setLevel(logging.ERROR)
+
+# --------- DATA FOLDERS ENSURE ---------
+os.makedirs("data/users", exist_ok=True)
+os.makedirs("data/backups", exist_ok=True)
+if not os.path.exists("data/state.json"):
+    open("data/state.json", "w").write("{}")
+
+# --------- IMPORTS (BOT + WEB + UTILS) ---------
 from web.app import app as flask_app
+
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher(bot)
 
 from handlers.start_handler import register_start_handlers
 from handlers.project_handler import register_project_handlers
@@ -21,106 +43,96 @@ from utils.monitor import check_expired, ensure_restart_on_boot
 from utils.backup import backup_projects
 from utils.helpers import backup_latest_path, restore_from_zip
 
-load_dotenv()
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-OWNER_ID = int(os.getenv("OWNER_ID", "0"))
-BASE_URL = os.getenv("BASE_URL", "")
-PORT = int(os.getenv("PORT", "10000"))
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-logging.getLogger("aiogram").setLevel(logging.ERROR)
-
-# --------- DATA FOLDERS ---------
-os.makedirs("data/users", exist_ok=True)
-os.makedirs("data/backups", exist_ok=True)
-if not os.path.exists("data/state.json"):
-    with open("data/state.json", "w", encoding="utf-8") as f:
-        f.write("{}")
-
-# --------- BOT & DISPATCHER ---------
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(bot)
-
-
-# --------- FLASK SERVER THREAD ---------
+# ---------------- FLASK SERVER (WEB DASHBOARD) ---------------- #
 def run_flask():
+    """
+    Web dashboard ko alag thread pe chalao.
+    """
     flask_app.run(host="0.0.0.0", port=PORT)
 
 
-# --------- EXPIRY CHECK THREAD ---------
+# ---------------- EXPIRY CHECK (FREE USER 12H LIMIT) ---------------- #
 def expire_checker():
+    """
+    Har 60 second me free/premium expiry check karega.
+    """
     while True:
         try:
-            # Free user 12h / premium 24h logic utils.monitor.check_expired ke andar hai
             check_expired()
         except Exception as e:
-            logging.error("Expire Error: %s", e)
+            logging.error(f"Expire Error: {e}")
         time.sleep(60)
 
 
-# --------- AUTO BACKUP THREAD (10 min) ---------
-async def _send_auto_backup(path: str):
-    try:
-        await bot.send_document(
-            OWNER_ID,
-            open(path, "rb"),
-            caption="📦 Auto Backup (last 10 minutes state)",
-        )
-        logging.info("Auto-backup sent to owner.")
-    except Exception as e:
-        logging.error("send backup error: %s", e)
-
-
+# ---------------- AUTO BACKUP LOOP (EVERY 10 MIN) ---------------- #
 def backup_loop():
-    # Har 10 minute pura data ka backup + owner ko zip send
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
+    """
+    Har 10 minute me backup_projects() chalata rahega.
+    backup_projects() ke andar chahe local ZIP banta ho
+    ya Google Drive upload ho – yahan se sirf call ho raha hai.
+    """
     while True:
         try:
             path = backup_projects()
-            logging.info("Auto-backup created at %s", path)
-            loop.run_until_complete(_send_auto_backup(path))
+            logging.info(f"[AUTO BACKUP] Backup created: {path}")
         except Exception as e:
-            logging.error("backup error: %s", e)
-        time.sleep(600)  # 10 minutes
+            logging.error(f"[AUTO BACKUP] Backup error: {e}")
+        # 600 sec = 10 minute
+        time.sleep(600)
 
 
-# --------- START SERVICES + BOT ---------
+# ---------------- BOOT RESTORE + STARTUP BACKUP + SERVICES ---------------- #
 def start_services():
-    # 1) Boot pe latest backup se restore
+    """
+    - Bot start hone par:
+        1) Agar koi latest backup ZIP hai -> restore_from_zip()
+        2) Turant ek fresh backup bhi le (startup snapshot)
+    - Phir Flask / expiry checker / auto-backup threads start kare
+    - Aakhri me aiogram polling start kare
+    """
+
+    # 1) BOOT RESTORE (AGAR BACKUP HAI TO)
     try:
         last = backup_latest_path()
         if last:
+            logging.info(f"[BOOT RESTORE] Found latest backup: {last} -> restoring...")
             restore_from_zip(last)
-            logging.info("Restored from latest backup at startup: %s", last)
+            logging.info("[BOOT RESTORE] Restore complete.")
+        else:
+            logging.info("[BOOT RESTORE] No backup zip found, skipping restore.")
     except Exception as e:
-        logging.error("restore error: %s", e)
+        logging.error(f"[BOOT RESTORE] Restore failed: {e}")
 
-    # 2) Background threads
+    # 2) STARTUP BACKUP (BOT DUBARA START HOTE HI BACKUP LE)
+    try:
+        first_path = backup_projects()
+        logging.info(f"[STARTUP BACKUP] Initial backup created: {first_path}")
+    except Exception as e:
+        logging.error(f"[STARTUP BACKUP] Failed to create initial backup: {e}")
+
+    # 3) BACKGROUND THREADS
     threading.Thread(target=run_flask, daemon=True).start()
     threading.Thread(target=expire_checker, daemon=True).start()
     threading.Thread(target=backup_loop, daemon=True).start()
 
-    # 3) Restart-on-boot marker (render pe auto restart ke liye)
+    # 4) RESTART-ON-BOOT HANDLING (AGAR utils.monitor ME IMPLEMENT HAI)
     try:
         ensure_restart_on_boot()
     except Exception as e:
-        logging.error("ensure_restart_on_boot error: %s", e)
+        logging.error(f"[RESTART HANDLER] Error: {e}")
 
-    # 4) Start polling
+    # 5) START TELEGRAM BOT
     executor.start_polling(dp, skip_updates=True)
 
 
+# ---------------- REGISTER HANDLERS + START ---------------- #
 if __name__ == "__main__":
-    # Order important hai – start/project/admin/backup sab register honge
+    # saare handlers register karo
     register_start_handlers(dp, bot, OWNER_ID, BASE_URL)
     register_project_handlers(dp, bot, OWNER_ID, BASE_URL)
     register_admin_handlers(dp, bot, OWNER_ID, BASE_URL)
     register_backup_handlers(dp, bot, OWNER_ID, BASE_URL)
 
+    # services + auto backup + restore start
     start_services()
