@@ -1,4 +1,4 @@
-import os, time, zipfile
+import os, time, shutil, zipfile
 from aiogram import types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -213,7 +213,7 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
 
         st = load_json()
         if not st.get("awaiting_backup_upload"):
-            return  # normal document (project upload), project_handler handle karega
+            return  # normal document (e.g. project upload), let other handlers manage
 
         # Clear flag first
         st["awaiting_backup_upload"] = False
