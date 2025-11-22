@@ -1,6 +1,13 @@
 # handlers/project_handler.py
 
-import os, zipfile, shutil, tempfile, time, hmac, hashlib, asyncio
+import os
+import zipfile
+import shutil
+import tempfile
+import time
+import hmac
+import hashlib
+import asyncio
 from datetime import datetime, timezone
 
 from aiogram import types
@@ -11,7 +18,7 @@ from utils.installer import install_requirements_if_present, detect_imports_and_
 from utils.runner import start_script, stop_script, restart_script, read_logs, get_status
 
 BASE_URL = os.getenv("BASE_URL", "")
-OWNER_ID = None  # set in register_project_handlers
+OWNER_ID = None  # register_project_handlers me set hoga
 
 
 def _user_proj_dir(uid, proj):
@@ -35,7 +42,7 @@ def project_kb(uid, proj):
     kb.add(
         InlineKeyboardButton("📜 Logs", callback_data=f"logs::{proj}"),
         InlineKeyboardButton("📂 File Manager", url=_fm_link(uid, proj)),
-        InlineKeyboardButton("🔃 Refresh", callback_data=f"status_refresh::{proj}"),
+        InlineKeyboardButton("🔄 Refresh", callback_data=f"status_refresh::{proj}"),
     )
     kb.add(
         InlineKeyboardButton("⬇️ Download", url=f"{BASE_URL}/download/{uid}/{proj}"),
@@ -53,11 +60,9 @@ def status_text(uid, proj):
         if k.startswith(f"{proj}:"):
             entry = v
             break
-
     s = get_status(uid, proj)
     running = s["running"]
     pid = s["pid"] or "N/A"
-
     if entry:
         start_ts = entry.get("start", 0)
         uptime = int(time.time() - start_ts) if start_ts else 0
@@ -69,21 +74,21 @@ def status_text(uid, proj):
         )
         cmd = entry.get("cmd", "python3 main.py")
         return (
-            f"FASTBOT Status: `{proj}`\n\n"
-            f"Status: {'🟢 Running' if running else '🔴 Stopped'}\n"
-            f"PID: `{pid}`\n"
-            f"Uptime: `{h:02d}:{m:02d}:{s2:02d}`\n"
-            f"Last Run: `{last_run}`\n"
-            f"Run Command: `{cmd}`"
+            f"Project Status for {proj}\n\n"
+            f"🔹 Status: {'🟢 Running' if running else '🔴 Stopped'}\n"
+            f"🔹 PID: {pid}\n"
+            f"🔹 Uptime: {h:02d}:{m:02d}:{s2:02d}\n"
+            f"🔹 Last Run: {last_run}\n"
+            f"🔹 Run Command: {cmd}"
         )
     else:
         return (
-            f"FASTBOT Status: `{proj}`\n\n"
-            f"Status: {'🟢 Running' if running else '🔴 Stopped'}\n"
-            f"PID: `{pid if running else 'N/A'}`\n"
-            f"Uptime: `N/A`\n"
-            f"Last Run: `Never`\n"
-            f"Run Command: auto-detected"
+            f"Project Status for {proj}\n\n"
+            f"🔹 Status: {'🟢 Running' if running else '🔴 Stopped'}\n"
+            f"🔹 PID: {pid if running else 'N/A'}\n"
+            f"🔹 Uptime: {'N/A' if not running else '00:00:00'}\n"
+            f"🔹 Last Run: Never\n"
+            f"🔹 Run Command: auto-detected"
         )
 
 
@@ -95,28 +100,12 @@ async def _clean_progress(messages):
             pass
 
 
-def _extract_zip(zip_path, dest):
-    with zipfile.ZipFile(zip_path, "r") as z:
-        z.extractall(dest)
-    # flatten single top folder
-    while True:
-        items = os.listdir(dest)
-        if len(items) == 1 and os.path.isdir(os.path.join(dest, items[0])):
-            inner = os.path.join(dest, items[0])
-            for fn in os.listdir(inner):
-                shutil.move(os.path.join(inner, fn), os.path.join(dest, fn))
-            shutil.rmtree(inner, ignore_errors=True)
-        else:
-            break
-
-
 def register_project_handlers(dp, bot, owner_id, base_url):
     global BASE_URL, OWNER_ID
     BASE_URL = base_url
     OWNER_ID = owner_id
 
-    # =============== NEW PROJECT FLOW ===============
-
+    # ===== NEW PROJECT NAME =====
     @dp.callback_query_handler(lambda c: c.data == "deploy:start")
     async def start_deploy(c: types.CallbackQuery):
         st = ensure_state_user(c.from_user.id)
@@ -130,6 +119,7 @@ def register_project_handlers(dp, bot, owner_id, base_url):
         )
         await c.answer()
 
+    # ===== HANDLE PROJECT NAME TEXT =====
     @dp.message_handler(content_types=types.ContentType.TEXT)
     async def receive_name(msg: types.Message):
         st = load_json()
@@ -139,25 +129,36 @@ def register_project_handlers(dp, bot, owner_id, base_url):
             st.setdefault("users", {}).setdefault(str(msg.from_user.id), {}).setdefault(
                 "projects", []
             )
-
-            # Free / Premium project limit
+            # project limit free/premium
             is_prem = str(msg.from_user.id) in st.get("premium_users", {})
             limit = 10 if is_prem else 2
             if len(st["users"][str(msg.from_user.id)]["projects"]) >= limit:
                 return await msg.answer("⚠️ Project limit reached. Upgrade to premium.")
-
             if name not in st["users"][str(msg.from_user.id)]["projects"]:
                 st["users"][str(msg.from_user.id)]["projects"].append(name)
             save_json(STATE_FILE, st)
             os.makedirs(_user_proj_dir(msg.from_user.id, name), exist_ok=True)
             await msg.answer(
-                f"✅ Project `{name}` created.\nNow send `.py` or `.zip` as *DOCUMENT*.",
+                f"✅ Project `{name}` created. Send .py or .zip as DOCUMENT.",
                 parse_mode="Markdown",
             )
 
-    # =============== PROJECT UPLOAD (DOCUMENT) ===============
-    # yahan backup-upload guard + freeze fix + single success message
+    # ===== ZIP EXTRACT HELPER =====
+    def _extract_zip(zip_path, dest):
+        with zipfile.ZipFile(zip_path, "r") as z:
+            z.extractall(dest)
+        # single-folder zip ko flatten karo
+        while True:
+            items = os.listdir(dest)
+            if len(items) == 1 and os.path.isdir(os.path.join(dest, items[0])):
+                inner = os.path.join(dest, items[0])
+                for fn in os.listdir(inner):
+                    shutil.move(os.path.join(inner, fn), os.path.join(dest, fn))
+                shutil.rmtree(inner, ignore_errors=True)
+            else:
+                break
 
+    # ===== HANDLE PROJECT FILE / ZIP UPLOAD =====
     @dp.message_handler(content_types=types.ContentType.DOCUMENT)
     async def receive_doc(msg: types.Message):
         # 🔥 ignore project upload jab admin backup upload mode me ho
@@ -173,20 +174,15 @@ def register_project_handlers(dp, bot, owner_id, base_url):
             await msg.reply("Create a project first with New Project.")
             return
 
-        proj = projects[-1]  # last created project
+        proj = projects[-1]
         base = _user_proj_dir(uid, proj)
         os.makedirs(base, exist_ok=True)
 
-        status_msg = await msg.reply("📥 Uploading project file...")
-
+        # progress messages
+        m1 = await msg.reply("📥 Processing project...")
         filepath = os.path.join(base, msg.document.file_name)
         await msg.document.download(destination_file=filepath)
-
-        # Extract phase
-        try:
-            await status_msg.edit_text("🔧 Extracting / saving files...")
-        except:
-            pass
+        m2 = await msg.reply("🔧 Extracting / saving files...")
 
         if filepath.lower().endswith(".zip"):
             try:
@@ -196,61 +192,34 @@ def register_project_handlers(dp, bot, owner_id, base_url):
                 await msg.reply(f"Zip error: {e}")
                 return
 
-        # Dependencies phase
-        try:
-            await status_msg.edit_text("⚙️ Installing dependencies... (this can take some time)")
-        except:
-            pass
+        m3 = await msg.reply("⚙️ Installing dependencies...")
 
-        req = os.path.join(base, "requirements.txt")
-        try:
-            loop = asyncio.get_running_loop()
-            if os.path.exists(req):
-                # run installer in background thread -> event loop freeze kam
-                await loop.run_in_executor(None, install_requirements_if_present, base)
-            else:
-                # first .py file auto-detect
-                py_file = None
-                for n in os.listdir(base):
-                    if n.endswith(".py"):
-                        py_file = os.path.join(base, n)
-                        break
-                if py_file:
-                    await loop.run_in_executor(None, detect_imports_and_install, py_file)
-        except Exception as e:
-            await msg.reply(f"Dependency install error: `{e}`", parse_mode="Markdown")
+        loop = asyncio.get_event_loop()
 
-        # progress message delete karne ki try
-        try:
-            await status_msg.delete()
-        except:
-            pass
+        # requirements / auto install but in executor → bot kam freeze
+        if os.path.exists(os.path.join(base, "requirements.txt")):
+            await loop.run_in_executor(None, install_requirements_if_present, base)
+        else:
+            py = None
+            for n in os.listdir(base):
+                if n.endswith(".py"):
+                    py = os.path.join(base, n)
+                    break
+            if py:
+                await loop.run_in_executor(None, detect_imports_and_install, py)
 
-        # ✅ single success message control (spam avoid)
-        st = load_json()
-        now = int(time.time())
-        last_map = st.get("last_upload_success", {})
-        last = int(last_map.get(str(uid), 0) or 0)
+        await _clean_progress([m1, m2, m3])
 
         kb = InlineKeyboardMarkup().add(
             InlineKeyboardButton("📂 MY PROJECTS", callback_data="menu:my_projects")
         )
+        await msg.reply(
+            "🎉 Upload complete!\nGo to *MY PROJECTS* to run and manage.",
+            parse_mode="Markdown",
+            reply_markup=kb,
+        )
 
-        if now - last > 5:
-            # sirf tab send jab pichle 5 second me nahi bheja
-            await msg.reply(
-                "🎉 Upload complete!\nUse *MY PROJECTS* button to run and manage.",
-                parse_mode="Markdown",
-                reply_markup=kb,
-            )
-            last_map[str(uid)] = now
-            st["last_upload_success"] = last_map
-            save_json(STATE_FILE, st)
-        # agar within 5s multiple files aaye, silently complete – extra “upload complete”
-        # messages nahi aayenge
-
-    # =============== MY PROJECTS MENU ===============
-
+    # ===== MY PROJECTS MENU =====
     @dp.callback_query_handler(lambda c: c.data == "menu:my_projects")
     async def my_projects(c: types.CallbackQuery):
         st = load_json()
@@ -264,6 +233,7 @@ def register_project_handlers(dp, bot, owner_id, base_url):
         await c.message.edit_text("Your Projects:", reply_markup=kb)
         await c.answer()
 
+    # ===== PROJECT OPEN =====
     @dp.callback_query_handler(lambda c: c.data and c.data.startswith("proj:open:"))
     async def open_proj(c: types.CallbackQuery):
         proj = c.data.split(":", 2)[2]
@@ -273,6 +243,7 @@ def register_project_handlers(dp, bot, owner_id, base_url):
         )
         await c.answer()
 
+    # ===== STATUS REFRESH =====
     @dp.callback_query_handler(lambda c: c.data and c.data.startswith("status_refresh::"))
     async def refresh(c: types.CallbackQuery):
         proj = c.data.split("::", 1)[1]
@@ -282,8 +253,7 @@ def register_project_handlers(dp, bot, owner_id, base_url):
         )
         await c.answer("Refreshed")
 
-    # =============== RUN / STOP / RESTART ===============
-
+    # ===== RUN / STOP / RESTART / LOGS =====
     @dp.callback_query_handler(lambda c: c.data and c.data.startswith("run::"))
     async def run_cb(c: types.CallbackQuery):
         uid = c.from_user.id
@@ -314,8 +284,6 @@ def register_project_handlers(dp, bot, owner_id, base_url):
         await c.message.answer("🔁 Restarted.")
         await c.answer()
 
-    # =============== LOGS ===============
-
     @dp.callback_query_handler(lambda c: c.data and c.data.startswith("logs::"))
     async def logs_cb(c: types.CallbackQuery):
         uid = c.from_user.id
@@ -330,8 +298,7 @@ def register_project_handlers(dp, bot, owner_id, base_url):
         os.unlink(tmp.name)
         await c.answer()
 
-    # =============== DELETE PROJECT ===============
-
+    # ===== DELETE FLOW =====
     @dp.callback_query_handler(lambda c: c.data and c.data.startswith("delete::"))
     async def delete_cb(c: types.CallbackQuery):
         proj = c.data.split("::", 1)[1]
@@ -368,8 +335,7 @@ def register_project_handlers(dp, bot, owner_id, base_url):
             await c.message.edit_text(f"Delete failed: {e}")
         await c.answer()
 
-    # =============== BACK HOME ===============
-
+    # ===== BACK HOME =====
     @dp.callback_query_handler(lambda c: c.data == "back_home")
     async def back_home(c: types.CallbackQuery):
         from handlers.start_handler import WELCOME, main_menu
