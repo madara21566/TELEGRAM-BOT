@@ -1,4 +1,9 @@
-import os, time, shutil, zipfile
+# handlers/admin_handler.py
+
+import os
+import time
+import zipfile
+
 from aiogram import types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -52,7 +57,7 @@ def register_admin_handlers(dp, bot, OWNER_ID, BASE_URL):
     async def admin_main(c: types.CallbackQuery):
         if c.from_user.id != OWNER_ID:
             return await c.answer("Owner only", show_alert=True)
-        await c.message.edit_text("🛠   Admin Control Panel", reply_markup=_admin_kb(OWNER_ID, BASE_URL))
+        await c.message.edit_text("🛠  Admin Control Panel", reply_markup=_admin_kb(OWNER_ID, BASE_URL))
         await c.answer()
 
     # =============== USER LIST ===============
