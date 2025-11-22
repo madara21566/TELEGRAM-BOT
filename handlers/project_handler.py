@@ -1,4 +1,6 @@
-import os, zipfile, shutil, tempfile, time, hmac, hashlib
+# handlers/project_handler.py
+
+import os, zipfile, shutil, tempfile, time, hmac, hashlib, asyncio
 from datetime import datetime, timezone
 
 from aiogram import types
@@ -154,7 +156,7 @@ def register_project_handlers(dp, bot, owner_id, base_url):
             )
 
     # =============== PROJECT UPLOAD (DOCUMENT) ===============
-    # 👉 yahan tumhara requested guard laga hai
+    # yahan backup-upload guard + freeze fix + single success message
 
     @dp.message_handler(content_types=types.ContentType.DOCUMENT)
     async def receive_doc(msg: types.Message):
@@ -175,11 +177,17 @@ def register_project_handlers(dp, bot, owner_id, base_url):
         base = _user_proj_dir(uid, proj)
         os.makedirs(base, exist_ok=True)
 
-        m1 = await msg.reply("📥 Processing project...")
+        status_msg = await msg.reply("📥 Uploading project file...")
+
         filepath = os.path.join(base, msg.document.file_name)
         await msg.document.download(destination_file=filepath)
 
-        m2 = await msg.reply("🔧 Extracting / saving files...")
+        # Extract phase
+        try:
+            await status_msg.edit_text("🔧 Extracting / saving files...")
+        except:
+            pass
+
         if filepath.lower().endswith(".zip"):
             try:
                 _extract_zip(filepath, base)
@@ -188,30 +196,58 @@ def register_project_handlers(dp, bot, owner_id, base_url):
                 await msg.reply(f"Zip error: {e}")
                 return
 
-        m3 = await msg.reply("⚙️ Installing dependencies...")
+        # Dependencies phase
+        try:
+            await status_msg.edit_text("⚙️ Installing dependencies... (this can take some time)")
+        except:
+            pass
 
-        # requirements.txt or auto-detect imports
         req = os.path.join(base, "requirements.txt")
         try:
+            loop = asyncio.get_running_loop()
             if os.path.exists(req):
-                install_requirements_if_present(base)
+                # run installer in background thread -> event loop freeze kam
+                await loop.run_in_executor(None, install_requirements_if_present, base)
             else:
-                # first .py file
+                # first .py file auto-detect
                 py_file = None
                 for n in os.listdir(base):
                     if n.endswith(".py"):
                         py_file = os.path.join(base, n)
                         break
                 if py_file:
-                    detect_imports_and_install(py_file)
+                    await loop.run_in_executor(None, detect_imports_and_install, py_file)
         except Exception as e:
             await msg.reply(f"Dependency install error: `{e}`", parse_mode="Markdown")
 
-        await _clean_progress([m1, m2, m3])
-        await msg.reply(
-            "🎉 Upload complete!\nGo to *MY PROJECTS* to run and manage.",
-            parse_mode="Markdown",
+        # progress message delete karne ki try
+        try:
+            await status_msg.delete()
+        except:
+            pass
+
+        # ✅ single success message control (spam avoid)
+        st = load_json()
+        now = int(time.time())
+        last_map = st.get("last_upload_success", {})
+        last = int(last_map.get(str(uid), 0) or 0)
+
+        kb = InlineKeyboardMarkup().add(
+            InlineKeyboardButton("📂 MY PROJECTS", callback_data="menu:my_projects")
         )
+
+        if now - last > 5:
+            # sirf tab send jab pichle 5 second me nahi bheja
+            await msg.reply(
+                "🎉 Upload complete!\nUse *MY PROJECTS* button to run and manage.",
+                parse_mode="Markdown",
+                reply_markup=kb,
+            )
+            last_map[str(uid)] = now
+            st["last_upload_success"] = last_map
+            save_json(STATE_FILE, st)
+        # agar within 5s multiple files aaye, silently complete – extra “upload complete”
+        # messages nahi aayenge
 
     # =============== MY PROJECTS MENU ===============
 
