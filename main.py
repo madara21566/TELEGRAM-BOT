@@ -10,7 +10,10 @@ OWNER_ID = int(os.getenv('OWNER_ID', '0'))
 BASE_URL = os.getenv('BASE_URL', '')
 PORT = int(os.getenv('PORT', '10000'))
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logging.getLogger('aiogram').setLevel(logging.ERROR)
 
 os.makedirs('data/users', exist_ok=True)
@@ -30,11 +33,9 @@ from utils.monitor import check_expired, ensure_restart_on_boot
 from utils.backup import backup_projects
 from utils.helpers import backup_latest_path, restore_from_zip
 
-
 # ---------------- FLASK SERVER ---------------- #
 def run_flask():
     flask_app.run(host='0.0.0.0', port=PORT)
-
 
 # ---------------- EXPIRY CHECK ---------------- #
 def expire_checker():
@@ -45,45 +46,44 @@ def expire_checker():
             logging.error(f'Expire Error: {e}')
         time.sleep(60)
 
-
-# ---------------- AUTO BACKUP FIXED ---------------- #
-async def auto_backup_send(path):
+# ---------------- AUTO BACKUP (local zip) ---------------- #
+async def send_auto_backup(path):
     try:
-        with open(path, 'rb') as f:
-            await bot.send_document(
-                OWNER_ID, f,
-                caption="📦 Auto Backup (Every 10 Minutes)"
-            )
-        logging.info("Backup sent to owner successfully!")
+        await bot.send_document(
+            OWNER_ID,
+            open(path, 'rb'),
+            caption="📦 Auto Backup Completed (Every 10 Minutes)"
+        )
+        logging.info("Backup sent successfully!")
     except Exception as e:
         logging.error(f"Backup send failed: {e}")
 
-async def auto_backup_loop():
+def backup_loop():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     while True:
         try:
             path = backup_projects()
-            logging.info("Backup created successfully.")
-            await auto_backup_send(path)
+            logging.info(f"Backup created: {path}")
+            loop.run_until_complete(send_auto_backup(path))
         except Exception as e:
             logging.error(f"Backup error: {e}")
-        await asyncio.sleep(600)
+        time.sleep(600)  # 10 minutes
 
-
-# ---------------- START ALL SERVICES ---------------- #
+# ---------------- BOOT RESTORE + SERVICE START ---------------- #
 def start_services():
+    # Auto-restore last backup if exists
     try:
         last = backup_latest_path()
         if last:
             restore_from_zip(last)
-            logging.info("Restored latest backup on startup.")
+            logging.info(f"Restored from latest backup at boot: {last}")
     except Exception as e:
         logging.error(f"Restore failed: {e}")
 
     threading.Thread(target=run_flask, daemon=True).start()
     threading.Thread(target=expire_checker, daemon=True).start()
-
-    loop = asyncio.get_event_loop()
-    loop.create_task(auto_backup_loop())
+    threading.Thread(target=backup_loop, daemon=True).start()
 
     try:
         ensure_restart_on_boot()
@@ -92,7 +92,7 @@ def start_services():
 
     executor.start_polling(dp, skip_updates=True)
 
-
+# ---------------- REGISTER HANDLERS ---------------- #
 if __name__ == '__main__':
     register_start_handlers(dp, bot, OWNER_ID, BASE_URL)
     register_project_handlers(dp, bot, OWNER_ID, BASE_URL)
