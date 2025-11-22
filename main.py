@@ -1,4 +1,11 @@
-import os, logging, threading, time, asyncio
+# main.py
+
+import os
+import logging
+import threading
+import time
+import asyncio
+
 from aiogram import Bot, Dispatcher
 from aiogram.utils import executor
 from dotenv import load_dotenv
@@ -30,7 +37,7 @@ from handlers.project_handler import register_project_handlers
 from handlers.admin_handler import register_admin_handlers
 from handlers.backup_handler import register_backup_handlers
 from utils.monitor import check_expired, ensure_restart_on_boot
-from utils.backup import backup_projects
+from utils.backup import backup_projects, restore_latest_from_mongo
 from utils.helpers import backup_latest_path, restore_from_zip
 
 # ---------------- FLASK SERVER ---------------- #
@@ -46,7 +53,7 @@ def expire_checker():
             logging.error(f'Expire Error: {e}')
         time.sleep(60)
 
-# ---------------- AUTO BACKUP (local zip) ---------------- #
+# ---------------- AUTO BACKUP (LOCAL + MONGO) ---------------- #
 async def send_auto_backup(path):
     try:
         await bot.send_document(
@@ -54,30 +61,37 @@ async def send_auto_backup(path):
             open(path, 'rb'),
             caption="📦 Auto Backup Completed (Every 10 Minutes)"
         )
-        logging.info("Backup sent successfully!")
+        logging.info("Backup sent to owner successfully!")
     except Exception as e:
         logging.error(f"Backup send failed: {e}")
+
 
 def backup_loop():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     while True:
         try:
-            path = backup_projects()
-            logging.info(f"Backup created: {path}")
+            path = backup_projects()  # local zip + Mongo upload
+            logging.info("Backup created successfully.")
+            # owner ko bhi bhejo (optional)
             loop.run_until_complete(send_auto_backup(path))
         except Exception as e:
             logging.error(f"Backup error: {e}")
-        time.sleep(600)  # 10 minutes
+        time.sleep(600)  # 10 min
 
 # ---------------- BOOT RESTORE + SERVICE START ---------------- #
 def start_services():
-    # Auto-restore last backup if exists
+    # 1) Try MongoDB se restore (agar configured)
     try:
-        last = backup_latest_path()
-        if last:
-            restore_from_zip(last)
-            logging.info(f"Restored from latest backup at boot: {last}")
+        restored = restore_latest_from_mongo("data")
+        if restored:
+            logging.info("Restored from latest MongoDB backup at startup.")
+        else:
+            # 2) warna local backup se restore
+            last = backup_latest_path()
+            if last:
+                restore_from_zip(last)
+                logging.info("Restored from latest local backup at startup.")
     except Exception as e:
         logging.error(f"Restore failed: {e}")
 
