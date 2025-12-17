@@ -1,5 +1,5 @@
 # =====================================================
-# MAIN RUNNER – GOD MADARA
+# MAIN RUNNER – GOD MADARA (FIXED & STABLE)
 # Telegram Bot + VCF Bot + Access System + Flask
 # =====================================================
 
@@ -8,7 +8,7 @@ import threading
 from flask import Flask
 from telegram.ext import ApplicationBuilder
 
-# Import your modules
+# Import modules
 import vcf_bot
 import access_system
 
@@ -21,11 +21,11 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 PORT = int(os.environ.get("PORT", "10000"))
 
 if not BOT_TOKEN:
-    raise RuntimeError("❌ BOT_TOKEN missing in environment variables")
+    raise RuntimeError("❌ BOT_TOKEN missing")
 if not DATABASE_URL:
-    raise RuntimeError("❌ DATABASE_URL missing in environment variables")
+    raise RuntimeError("❌ DATABASE_URL missing")
 if not OWNER_ID:
-    raise RuntimeError("❌ OWNER_ID missing in environment variables")
+    raise RuntimeError("❌ OWNER_ID missing")
 
 # =====================================================
 # FLASK APP (RENDER KEEP-ALIVE)
@@ -48,30 +48,23 @@ threading.Thread(target=run_flask, daemon=True).start()
 application = ApplicationBuilder().token(BOT_TOKEN).build()
 
 # =====================================================
-# INITIALIZE DATABASE
+# INITIALIZE DATABASE (POSTGRES)
 # =====================================================
 access_system.init_db()
 
 # =====================================================
 # INJECT ACCESS CHECK INTO VCF BOT
 # =====================================================
-# vcf_bot will call this function to check user access
 application.bot_data["access_check"] = access_system.check_access
 
 # =====================================================
 # REGISTER HANDLERS
 # =====================================================
-# 1️⃣ Register ORIGINAL VCF bot handlers
+# 1️⃣ ORIGINAL VCF BOT
 vcf_bot.register_handlers(application)
 
-# 2️⃣ Register ACCESS SYSTEM handlers (admin + key)
+# 2️⃣ ACCESS SYSTEM (ADMIN + KEY)
 access_system.register_handlers(application)
-
-# =====================================================
-# START HOOK (ADMIN PANEL BUTTON ON /START)
-# =====================================================
-# This ensures OWNER sees Admin Panel button
-application.post_init = lambda app: None
 
 # =====================================================
 # RUN BOT
