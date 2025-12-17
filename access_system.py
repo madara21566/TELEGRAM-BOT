@@ -1,5 +1,5 @@
 # =====================================================
-# ACCESS SYSTEM – KEY + ADMIN + POSTGRES (FINAL FIXED)
+# ACCESS SYSTEM – KEY + ADMIN + POSTGRES (FINAL)
 # GOD MADARA
 # =====================================================
 
@@ -8,10 +8,11 @@ import re
 import uuid
 import psycopg2
 from datetime import datetime, timedelta
+
 from telegram import (
     Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup
+    InlineKeyboardMarkup,
+    InlineKeyboardButton
 )
 from telegram.ext import (
     ContextTypes,
@@ -50,9 +51,9 @@ def init_db():
         """)
         conn.commit()
 
-# ================= ACCESS CHECK (FIXED) =================
+# ================= ACCESS CHECK =================
 def check_access(user_id: int) -> bool:
-    # 👑 OWNER = ALWAYS ALLOWED (NO KEY, NO EXPIRY, NO BLOCK)
+    # 👑 OWNER = ALWAYS ALLOWED
     if user_id == OWNER_ID:
         return True
 
@@ -117,26 +118,38 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = query.from_user.id
     data = query.data
 
-    # ❌ Non-owner cannot use admin panel
+    # 🔑 Redeem key (ALL USERS)
+    if data == "redeem_key":
+        context.user_data["await_key"] = True
+        await query.message.reply_text("🔑 Please send your key now")
+        return
+
+    # ❌ Non-owner cannot access admin panel
     if uid != OWNER_ID:
         return
 
+    # ---- Open admin panel ----
     if data == "open_admin":
         await query.message.reply_text(
             "👑 ADMIN PANEL",
             reply_markup=admin_keyboard()
         )
 
+    # ---- Generate key ----
     elif data == "admin_genkey":
         context.user_data["await_admin"] = "genkey"
         await query.message.reply_text(
             "⏳ Send duration:\n1h / 1d / 1m / 5m / permanent"
         )
 
+    # ---- Other admin actions ----
     elif data in {
-        "admin_users", "admin_expired",
-        "admin_broadcast", "admin_block",
-        "admin_unblock", "admin_remove"
+        "admin_users",
+        "admin_expired",
+        "admin_broadcast",
+        "admin_block",
+        "admin_unblock",
+        "admin_remove"
     }:
         context.user_data["await_admin"] = data
         await query.message.reply_text("✏️ Send input now")
@@ -146,13 +159,13 @@ async def admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text.strip()
 
-    # ===== REDEEM KEY (USER SIDE) =====
+    # ===== USER: REDEEM KEY =====
     if context.user_data.get("await_key"):
         context.user_data.pop("await_key")
         if redeem_key(uid, text):
             await update.message.reply_text("✅ Key redeemed successfully")
         else:
-            await update.message.reply_text("❌ Invalid or used key")
+            await update.message.reply_text("❌ Invalid or already used key")
         return
 
     # ===== ADMIN ACTIONS =====
@@ -162,6 +175,7 @@ async def admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data.pop("await_admin")
 
+    # ---- Generate key ----
     if action == "genkey":
         key = generate_key(text)
         if not key:
@@ -172,6 +186,7 @@ async def admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
+    # ---- User list ----
     elif action == "admin_users":
         with get_conn() as conn:
             cur = conn.cursor()
@@ -187,6 +202,7 @@ async def admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg += f"{u} | P:{p} | E:{e} | B:{b}\n"
         await update.message.reply_text(msg)
 
+    # ---- Expired users ----
     elif action == "admin_expired":
         with get_conn() as conn:
             cur = conn.cursor()
@@ -203,6 +219,7 @@ async def admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "\n".join(str(r[0]) for r in rows)
             )
 
+    # ---- Broadcast ----
     elif action == "admin_broadcast":
         with get_conn() as conn:
             cur = conn.cursor()
@@ -212,19 +229,22 @@ async def admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for u in users:
             try:
                 await context.bot.send_message(u[0], text)
-            except:
+            except Exception:
                 pass
 
         await update.message.reply_text("📢 Broadcast sent")
 
+    # ---- Block ----
     elif action == "admin_block":
         update_user_flag(text, True)
         await update.message.reply_text("🚫 User blocked")
 
+    # ---- Unblock ----
     elif action == "admin_unblock":
         update_user_flag(text, False)
         await update.message.reply_text("✅ User unblocked")
 
+    # ---- Remove premium ----
     elif action == "admin_remove":
         remove_premium(text)
         await update.message.reply_text("➖ Premium removed")
