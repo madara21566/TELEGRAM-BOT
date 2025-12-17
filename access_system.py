@@ -1,5 +1,5 @@
 # =====================================================
-# ACCESS SYSTEM – KEY + ADMIN + POSTGRES
+# ACCESS SYSTEM – KEY + ADMIN + POSTGRES (FINAL FIXED)
 # GOD MADARA
 # =====================================================
 
@@ -15,7 +15,6 @@ from telegram import (
 )
 from telegram.ext import (
     ContextTypes,
-    CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
     filters
@@ -51,8 +50,12 @@ def init_db():
         """)
         conn.commit()
 
-# ================= ACCESS CHECK =================
+# ================= ACCESS CHECK (FIXED) =================
 def check_access(user_id: int) -> bool:
+    # 👑 OWNER = ALWAYS ALLOWED (NO KEY, NO EXPIRY, NO BLOCK)
+    if user_id == OWNER_ID:
+        return True
+
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -65,6 +68,7 @@ def check_access(user_id: int) -> bool:
             return False
 
         premium, expiry, blocked = row
+
         if blocked:
             return False
 
@@ -105,39 +109,24 @@ def admin_keyboard():
         ]
     ])
 
-# ================= START HOOK =================
-async def start_hook(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    main.py se call hota hai
-    OWNER ke /start par admin panel button dikhata hai
-    """
-    if update.effective_user.id == OWNER_ID:
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("👑 Admin Panel", callback_data="open_admin")]
-        ])
-        await update.message.reply_text(
-            "👑 Admin access enabled",
-            reply_markup=kb
-        )
-
 # ================= CALLBACK HANDLER =================
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
     uid = query.from_user.id
     data = query.data
 
+    # ❌ Non-owner cannot use admin panel
     if uid != OWNER_ID:
         return
 
-    # ---- Open panel ----
     if data == "open_admin":
         await query.message.reply_text(
             "👑 ADMIN PANEL",
             reply_markup=admin_keyboard()
         )
 
-    # ---- Generate key ----
     elif data == "admin_genkey":
         context.user_data["await_admin"] = "genkey"
         await query.message.reply_text(
@@ -173,9 +162,8 @@ async def admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data.pop("await_admin")
 
-    # ---- Generate key ----
     if action == "genkey":
-        key, expiry_sec = parse_and_generate_key(text)
+        key = generate_key(text)
         if not key:
             await update.message.reply_text("❌ Invalid duration")
             return
@@ -184,7 +172,6 @@ async def admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
-    # ---- User list ----
     elif action == "admin_users":
         with get_conn() as conn:
             cur = conn.cursor()
@@ -200,7 +187,6 @@ async def admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg += f"{u} | P:{p} | E:{e} | B:{b}\n"
         await update.message.reply_text(msg)
 
-    # ---- Expired ----
     elif action == "admin_expired":
         with get_conn() as conn:
             cur = conn.cursor()
@@ -209,6 +195,7 @@ async def admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             WHERE premium=TRUE AND expiry IS NOT NULL AND expiry < NOW()
             """)
             rows = cur.fetchall()
+
         if not rows:
             await update.message.reply_text("No expired users")
         else:
@@ -216,36 +203,34 @@ async def admin_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "\n".join(str(r[0]) for r in rows)
             )
 
-    # ---- Broadcast ----
     elif action == "admin_broadcast":
         with get_conn() as conn:
             cur = conn.cursor()
             cur.execute("SELECT user_id FROM users")
             users = cur.fetchall()
+
         for u in users:
             try:
                 await context.bot.send_message(u[0], text)
             except:
                 pass
+
         await update.message.reply_text("📢 Broadcast sent")
 
-    # ---- Block ----
     elif action == "admin_block":
-        update_user_flag(text, blocked=True)
+        update_user_flag(text, True)
         await update.message.reply_text("🚫 User blocked")
 
-    # ---- Unblock ----
     elif action == "admin_unblock":
-        update_user_flag(text, blocked=False)
+        update_user_flag(text, False)
         await update.message.reply_text("✅ User unblocked")
 
-    # ---- Remove premium ----
     elif action == "admin_remove":
         remove_premium(text)
         await update.message.reply_text("➖ Premium removed")
 
 # ================= KEY FUNCTIONS =================
-def parse_and_generate_key(duration: str):
+def generate_key(duration: str):
     duration = duration.lower()
 
     if duration == "permanent":
@@ -253,7 +238,7 @@ def parse_and_generate_key(duration: str):
     else:
         m = re.match(r"(\d+)([hdm])", duration)
         if not m:
-            return None, None
+            return None
         val, unit = int(m.group(1)), m.group(2)
         expiry_sec = val * (3600 if unit=="h" else 86400 if unit=="d" else 60)
 
@@ -267,7 +252,7 @@ def parse_and_generate_key(duration: str):
         )
         conn.commit()
 
-    return key, expiry_sec
+    return key
 
 def redeem_key(user_id: int, key: str) -> bool:
     with get_conn() as conn:
