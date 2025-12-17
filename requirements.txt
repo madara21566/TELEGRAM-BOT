@@ -11,9 +11,8 @@ platformdirs
 requests
 uvicorn
 fastapi
-python-telegram-bot==20.3
+python-telegram-bot==20.7
 pandas
 openpyxl
 xlrd
-werkzeug
-psycopg2
+werkzeupsycopg2-binary
