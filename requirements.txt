@@ -15,4 +15,5 @@ python-telegram-bot==20.7
 pandas
 openpyxl
 xlrd
-werkzeupsycopg2-binary
+werkzeu
+psycopg2-binary
