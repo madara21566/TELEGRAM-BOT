@@ -1,4 +1,0 @@
-rm package.json
-git add .
-git commit -m "Remove Node config to enable Java runtime"
-git push
