@@ -451,3 +451,256 @@ async def set_contact_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if context.args:
         set_user_setting(update.effective_user.id, 'contact_name', ' '.join(context.args))
+        await update.message.reply_text(f"✅ Contact name set to: {' '.join(context.args)}")
+
+async def set_limit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not has_access(update.effective_user.id):
+        await access_denied(update)
+        return
+    if context.args and context.args[0].isdigit():
+        set_user_setting(update.effective_user.id, 'limit', context.args[0])
+        await update.message.reply_text(f"✅ Limit set to: {context.args[0]}")
+
+async def set_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not has_access(update.effective_user.id):
+        await access_denied(update)
+        return
+    if context.args and context.args[0].isdigit():
+        set_user_setting(update.effective_user.id, 'start_index', context.args[0])
+        await update.message.reply_text(f"✅ Contact numbering will start from: {context.args[0]}")
+
+async def set_vcf_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not has_access(update.effective_user.id):
+        await access_denied(update)
+        return
+    if context.args and context.args[0].isdigit():
+        set_user_setting(update.effective_user.id, 'vcf_start', context.args[0])
+        await update.message.reply_text(f"✅ VCF numbering will start from: {context.args[0]}")
+
+async def set_country_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not has_access(update.effective_user.id):
+        await access_denied(update)
+        return
+    if context.args:
+        set_user_setting(update.effective_user.id, 'country_code', context.args[0])
+        await update.message.reply_text(f"✅ Country code set to: {context.args[0]}")
+
+async def set_group_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not has_access(update.effective_user.id):
+        await access_denied(update)
+        return
+    if context.args and context.args[0].isdigit():
+        set_user_setting(update.effective_user.id, 'group_start', context.args[0])
+        await update.message.reply_text(f"✅ Group numbering will start from: {context.args[0]}")
+
+async def reset_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not has_access(update.effective_user.id):
+        await access_denied(update)
+        return
+    user_id = update.effective_user.id
+    # Delete all settings for the user
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('DELETE FROM user_settings WHERE user_id = %s', (user_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    await update.message.reply_text("✅ All settings reset to default.")
+
+async def my_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not has_access(update.effective_user.id):
+        await access_denied(update)
+        return
+    user_id = update.effective_user.id
+    settings = (
+        f"📂 File name: {get_user_setting(user_id, 'file_name', default_vcf_name)}\n"
+        f"👤 Contact name: {get_user_setting(user_id, 'contact_name', default_contact_name)}\n"
+        f"📊 Limit: {get_user_setting(user_id, 'limit', str(default_limit))}\n"
+        f"🔢 Start index: {get_user_setting(user_id, 'start_index', 'Not set')}\n"
+        f"📄 VCF start: {get_user_setting(user_id, 'vcf_start', 'Not set')}\n"
+        f"🌍 Country code: {get_user_setting(user_id, 'country_code', 'None')}\n"
+        f"📑 Group start: {get_user_setting(user_id, 'group_start', 'Not set')}"
+    )
+    await update.message.reply_text(settings)
+
+async def make_vcf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not has_access(update.effective_user.id):
+        await access_denied(update)
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text("Usage: /makevcf Name number1 number2 ...")
+        return
+    contact_name = context.args[0]
+    numbers = context.args[1:]
+    file_path = generate_vcf(numbers, contact_name, contact_name)
+    await update.message.reply_document(document=open(file_path, "rb"))
+    os.remove(file_path)
+
+async def merge_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not has_access(update.effective_user.id):
+        await access_denied(update)
+        return
+    user_id = update.effective_user.id
+    set_user_setting(user_id, 'merge_files', str([]))
+    merge_filename = "Merged"
+    if context.args:
+        merge_filename = "_".join(context.args)
+    set_user_setting(user_id, 'merge_filename', merge_filename)
+    await update.message.reply_text(f"📂 Send me files to merge. Final file: {merge_filename}.vcf\n👉 Use /done when finished.")
+
+async def done_merge(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not has_access(update.effective_user.id):
+        await access_denied(update)
+        return
+    user_id = update.effective_user.id
+    merge_files_str = get_user_setting(user_id, 'merge_files', None)
+    if not merge_files_str:
+        await update.message.reply_text("❌ No files queued for merge.")
+        return
+    merge_files = eval(merge_files_str)
+    if not merge_files:
+        await update.message.reply_text("❌ No files queued for merge.")
+        return
+    all_numbers = set()
+    for file_path in merge_files:
+        if file_path.endswith(".vcf"):
+            all_numbers.update(extract_numbers_from_vcf(file_path))
+        elif file_path.endswith(".txt"):
+            all_numbers.update(extract_numbers_from_txt(file_path))
+    filename = get_user_setting(user_id, 'merge_filename', "Merged")
+    vcf_path = generate_vcf(list(all_numbers), filename)
+    await update.message.reply_document(document=open(vcf_path, "rb"))
+    os.remove(vcf_path)
+    for f_path in merge_files:
+        if os.path.exists(f_path):
+            os.remove(f_path)
+    set_user_setting(user_id, 'merge_files', None)
+    set_user_setting(user_id, 'merge_filename', None)
+    await update.message.reply_text(f"✅ Merge completed → {filename}.vcf")
+
+# Button handler for inline buttons
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    data = query.data
+
+    if data == "redeem":
+        await query.edit_message_text("Send your key:")
+        context.user_data['awaiting_key'] = True
+    elif data == "admin_panel" and str(user_id) == str(OWNER_ID):
+        keyboard = [
+            [InlineKeyboardButton("User List", callback_data="user_list")],
+            [InlineKeyboardButton("Key List", callback_data="key_list")],
+            [InlineKeyboardButton("Add Premium", callback_data="add_premium")],
+            [InlineKeyboardButton("Remove Premium", callback_data="remove_premium")],
+            [InlineKeyboardButton("Broadcast", callback_data="broadcast")],
+            [InlineKeyboardButton("Generate Key", callback_data="generate_key")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("Admin Panel:", reply_markup=reply_markup)
+    elif data == "user_list" and str(user_id) == str(OWNER_ID):
+        users = get_user_list()
+        text = "\n".join([f"User {u['user_id']}: {u['premium_until']}" for u in users]) or "No users."
+        await query.edit_message_text(text)
+    elif data == "key_list" and str(user_id) == str(OWNER_ID):
+        keys = get_key_list()
+        text = "\n".join([f"Key {k['key']}: {k['duration']} - Used: {k['used']}" for k in keys]) or "No keys."
+        await query.edit_message_text(text)
+    elif data == "add_premium" and str(user_id) == str(OWNER_ID):
+        await query.edit_message_text("Send user_id and duration (e.g., 123456789 1d):")
+        context.user_data['awaiting_add_premium'] = True
+    elif data == "remove_premium" and str(user_id) == str(OWNER_ID):
+        await query.edit_message_text("Send user_id to remove premium:")
+        context.user_data['awaiting_remove_premium'] = True
+    elif data == "broadcast" and str(user_id) == str(OWNER_ID):
+        await query.edit_message_text("Send message to broadcast:")
+        context.user_data['awaiting_broadcast'] = True
+    elif data == "generate_key" and str(user_id) == str(OWNER_ID):
+        await query.edit_message_text("Send duration (e.g., 1d, 1month, 1hour):")
+        context.user_data['awaiting_generate_key'] = True
+
+# Message handler for awaiting inputs
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text
+
+    if context.user_data.get('awaiting_key'):
+        success, duration = redeem_key(user_id, text)
+        if success:
+            await update.message.reply_text(f"Access granted for {duration}!")
+        else:
+            await update.message.reply_text("Invalid key.")
+        context.user_data['awaiting_key'] = False
+    elif context.user_data.get('awaiting_add_premium') and str(user_id) == str(OWNER_ID):
+        try:
+            user_id_to_add, duration_str = text.split()
+            result = add_premium(int(user_id_to_add), duration_str)
+            await update.message.reply_text(result)
+        except:
+            await update.message.reply_text("Invalid format.")
+        context.user_data['awaiting_add_premium'] = False
+    elif context.user_data.get('awaiting_remove_premium') and str(user_id) == str(OWNER_ID):
+        try:
+            result = remove_premium(int(text))
+            await update.message.reply_text(result)
+        except:
+            await update.message.reply_text("Invalid user_id.")
+        context.user_data['awaiting_remove_premium'] = False
+    elif context.user_data.get('awaiting_broadcast') and str(user_id) == str(OWNER_ID):
+        result = broadcast_message(text)
+        await update.message.reply_text(result)
+        context.user_data['awaiting_broadcast'] = False
+    elif context.user_data.get('awaiting_generate_key') and str(user_id) == str(OWNER_ID):
+        key, error = generate_key(text)
+        if key:
+            await update.message.reply_text(f"Generated key: {key}")
+        else:
+            await update.message.reply_text(error)
+        context.user_data['awaiting_generate_key'] = False
+    elif str(user_id) == str(OWNER_ID):
+        # Owner can access admin panel
+        keyboard = [[InlineKeyboardButton("Admin Panel", callback_data="admin_panel")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Owner access:", reply_markup=reply_markup)
+
+# Flask route for webhook
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    json_str = request.get_data().decode('UTF-8')
+    update = Update.de_json(json_str, application.bot)
+    application.process_update(update)
+    return 'OK'
+
+if __name__ == "__main__":
+    init_db()
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("setfilename", set_filename))
+    application.add_handler(CommandHandler("setcontactname", set_contact_name))
+    application.add_handler(CommandHandler("setlimit", set_limit))
+    application.add_handler(CommandHandler("setstart", set_start))
+    application.add_handler(CommandHandler("setvcfstart", set_vcf_start))
+    application.add_handler(CommandHandler("setcountrycode", set_country_code))
+    application.add_handler(CommandHandler("setgroup", set_group_number))
+    application.add_handler(CommandHandler("reset", reset_settings))
+    application.add_handler(CommandHandler("mysettings", my_settings))
+    application.add_handler(CommandHandler("makevcf", make_vcf_command))
+    application.add_handler(CommandHandler("merge", merge_command))
+    application.add_handler(CommandHandler("done", done_merge))
+    application.add_handler(CommandHandler("txt2vcf", txt2vcf))
+    application.add_handler(CommandHandler("vcf2txt", vcf2txt))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+    application.add_error_handler(error_handler)
+
+    # Set webhook (replace with your Render URL)
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get('PORT', 5000)),
+        url_path="/webhook",
+        webhook_url="https://your-render-app-url.onrender.com/webhook"  # Replace with actual URL
+    )
+
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
