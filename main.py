@@ -1,7 +1,3 @@
-# =========================
-# PART 3: MAIN BOT (VCF)
-# =========================
-
 import os
 import re
 import threading
@@ -18,7 +14,7 @@ from telegram.ext import (
     CallbackQueryHandler, ContextTypes, filters
 )
 
-# ---------- IMPORT CORE ----------
+# ================= IMPORT CORE =================
 from database_and_access import (
     init_db,
     ensure_user,
@@ -43,11 +39,11 @@ from admin_panel import (
     admin_broadcast_send
 )
 
-# ---------- CONFIG ----------
+# ================= CONFIG =================
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = 7640327597
 
-# ---------- FLASK (RENDER) ----------
+# ================= FLASK (RENDER SAFE) =================
 PORT = int(os.environ.get("PORT", 10000))
 flask_app = Flask(__name__)
 
@@ -58,48 +54,22 @@ def home():
 def run_flask():
     flask_app.run(host="0.0.0.0", port=PORT)
 
-# ---------- BOT START TIME ----------
+# ================= BOT START TIME =================
 BOT_START_TIME = datetime.utcnow()
 
-# ---------- USER SETTINGS (ORIGINAL) ----------
-default_vcf_name = "Contacts"
-default_contact_name = "Contact"
-default_limit = 100
-
-user_file_names = {}
-user_contact_names = {}
-user_limits = {}
-user_start_indexes = {}
-user_vcf_start_numbers = {}
-user_country_codes = {}
-user_group_start_numbers = {}
-merge_data = {}
-conversion_mode = {}
-
-# ================= ERROR HANDLER =================
-async def error_handler(update, context):
-    err = "".join(traceback.format_exception(
-        None, context.error, context.error.__traceback__
-    ))
-    print(err)
-
-# ================= HELPERS =================
-def generate_vcf(numbers, filename="Contacts", contact_name="Contact",
-                 start_index=None, country_code="", group_num=None):
-    vcf_data = ""
-    for i, num in enumerate(numbers, start=(start_index or 1)):
-        name = f"{contact_name}{str(i).zfill(3)}"
-        if group_num:
-            name += f" (Group {group_num})"
-        formatted = f"{country_code}{num}" if country_code else num
-        vcf_data += (
-            "BEGIN:VCARD\nVERSION:3.0\n"
-            f"FN:{name}\n"
-            f"TEL;TYPE=CELL:{formatted}\n"
+# ================= VCF HELPERS =================
+def generate_vcf(numbers, filename="Contacts", contact_name="Contact"):
+    out = ""
+    for i, n in enumerate(numbers, start=1):
+        out += (
+            "BEGIN:VCARD\n"
+            "VERSION:3.0\n"
+            f"FN:{contact_name}{str(i).zfill(3)}\n"
+            f"TEL;TYPE=CELL:{n}\n"
             "END:VCARD\n"
         )
     with open(f"{filename}.vcf", "w") as f:
-        f.write(vcf_data)
+        f.write(out)
     return f"{filename}.vcf"
 
 def extract_numbers_from_vcf(path):
@@ -110,9 +80,17 @@ def extract_numbers_from_vcf(path):
                 nums.add(re.sub(r"\D", "", line))
     return list(nums)
 
+# ================= ERROR HANDLER =================
+async def error_handler(update, context):
+    err = "".join(traceback.format_exception(
+        None, context.error, context.error.__traceback__
+    ))
+    print(err)
+
 # ================= START =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+
     ensure_user(user.id, user.username)
 
     if not has_access(user.id):
@@ -123,7 +101,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "☠️ Welcome to VCF Bot ☠️\n\n"
         f"⏱ Uptime: {uptime}\n\n"
-        "Send numbers or TXT / CSV / XLSX / VCF files."
+        "📂 Send TXT / CSV / XLSX / VCF or numbers"
     )
 
     buttons = []
@@ -138,14 +116,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # ================= REDEEM =================
-async def redeem_btn(update, context):
+async def redeem_btn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     context.user_data["redeem"] = True
     await update.callback_query.message.reply_text("🔑 Send your premium key")
 
-async def redeem_text(update, context):
+async def redeem_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.get("redeem"):
         return
+
     ok, msg = redeem_key_for_user(
         update.effective_user.id,
         update.message.text.strip()
@@ -154,7 +133,7 @@ async def redeem_text(update, context):
     await update.message.reply_text(msg)
 
 # ================= FILE HANDLER =================
-async def handle_document(update, context):
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not has_access(update.effective_user.id):
         await show_access_denied(update)
         return
@@ -191,7 +170,7 @@ if __name__ == "__main__":
     # Commands
     app.add_handler(CommandHandler("start", start))
 
-    # Callbacks
+    # Callback buttons
     app.add_handler(CallbackQueryHandler(redeem_btn, pattern="redeem"))
     app.add_handler(CallbackQueryHandler(show_admin_panel, pattern="admin"))
 
@@ -204,14 +183,21 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(admin_remove_prompt, pattern="admin_remove"))
     app.add_handler(CallbackQueryHandler(admin_broadcast_prompt, pattern="admin_broadcast"))
 
-    # Text handlers
+    # Text handlers (ORDER IS IMPORTANT)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, redeem_text))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, admin_genkey_text))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, admin_block_text))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, admin_remove_text))
-    app.add_handler(MessageHandler(filters.ALL, admin_broadcast_send))
 
-    # Files
+    # Broadcast LAST
+    app.add_handler(
+        MessageHandler(
+            (filters.TEXT | filters.PHOTO) & ~filters.COMMAND,
+            admin_broadcast_send
+        )
+    )
+
+    # Documents
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 
     app.add_error_handler(error_handler)
