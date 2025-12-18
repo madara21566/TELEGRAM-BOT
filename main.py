@@ -1,11 +1,9 @@
 import os
 import re
-import threading
 import traceback
 from datetime import datetime
 
 import pandas as pd
-from flask import Flask
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup
 )
@@ -43,25 +41,14 @@ from admin_panel import (
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = 7640327597
 
-# ================= FLASK (RENDER SAFE) =================
-PORT = int(os.environ.get("PORT", 10000))
-flask_app = Flask(__name__)
-
-@flask_app.route("/")
-def home():
-    return "VCF Bot Running"
-
-def run_flask():
-    flask_app.run(host="0.0.0.0", port=PORT)
-
-# ================= BOT START TIME =================
+# ================= START TIME =================
 BOT_START_TIME = datetime.utcnow()
 
 # ================= VCF HELPERS =================
 def generate_vcf(numbers, filename="Contacts", contact_name="Contact"):
-    out = ""
+    data = ""
     for i, n in enumerate(numbers, start=1):
-        out += (
+        data += (
             "BEGIN:VCARD\n"
             "VERSION:3.0\n"
             f"FN:{contact_name}{str(i).zfill(3)}\n"
@@ -69,7 +56,7 @@ def generate_vcf(numbers, filename="Contacts", contact_name="Contact"):
             "END:VCARD\n"
         )
     with open(f"{filename}.vcf", "w") as f:
-        f.write(out)
+        f.write(data)
     return f"{filename}.vcf"
 
 def extract_numbers_from_vcf(path):
@@ -82,9 +69,9 @@ def extract_numbers_from_vcf(path):
 
 # ================= ERROR HANDLER =================
 async def error_handler(update, context):
-    err = "".join(traceback.format_exception(
-        None, context.error, context.error.__traceback__
-    ))
+    err = "".join(
+        traceback.format_exception(None, context.error, context.error.__traceback__)
+    )
     print(err)
 
 # ================= START =================
@@ -101,7 +88,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "☠️ Welcome to VCF Bot ☠️\n\n"
         f"⏱ Uptime: {uptime}\n\n"
-        "📂 Send TXT / CSV / XLSX / VCF or numbers"
+        "📂 Send TXT / CSV / XLSX / VCF files\n"
+        "📞 Or send numbers directly"
     )
 
     buttons = []
@@ -163,8 +151,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == "__main__":
     init_db()
 
-    threading.Thread(target=run_flask, daemon=True).start()
-
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # Commands
@@ -183,7 +169,7 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(admin_remove_prompt, pattern="admin_remove"))
     app.add_handler(CallbackQueryHandler(admin_broadcast_prompt, pattern="admin_broadcast"))
 
-    # Text handlers (ORDER IS IMPORTANT)
+    # Text handlers (ORDER IMPORTANT)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, redeem_text))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, admin_genkey_text))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, admin_block_text))
@@ -202,5 +188,5 @@ if __name__ == "__main__":
 
     app.add_error_handler(error_handler)
 
-    print("🚀 VCF Bot Running")
-    app.run_polling()
+    print("🚀 VCF Bot Running (Polling)")
+    app.run_polling(drop_pending_updates=True)
