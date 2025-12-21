@@ -1,6 +1,6 @@
 flask 
 psutil
-
+asyncio
 gunicorn
 aiohttp
 python-telegram-bot[webhooks]
