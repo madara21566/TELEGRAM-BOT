@@ -338,12 +338,15 @@ async def done_merge(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(f_path): os.remove(f_path)
     merge_data.pop(user_id, None)
     await update.message.reply_text(f"✅ Merge completed → {filename}.vcf")
-    
-    async def start_webhook(application):
+async def start_webhook(application):
     await application.initialize()
     await application.bot.set_webhook(f"{WEBHOOK_URL}/{BOT_TOKEN}")
     await application.start()
 
+
+if __name__ == "__main__":
+    ...  
+    
 # ✅ MAIN
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
