@@ -3,6 +3,8 @@ import re
 import pandas as pd
 from datetime import datetime
 import traceback
+from flask import Flask
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -15,7 +17,17 @@ from telegram.ext import (
 # ✅ CONFIGURATION
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BOT_USERNAME = os.environ.get("BOT_USERNAME")
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 OWNER_ID = 7640327597  # Error logs ke liye rakha gaya hai
+
+# ===== FLASK =====
+flask_app = Flask(__name__)
+
+@flask_app.route("/")
+def home():
+    return "Bot is running"
+
+PORT = int(os.environ.get("PORT", 10000))
 
 BOT_START_TIME = datetime.utcnow()
 
@@ -329,6 +341,10 @@ async def done_merge(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ✅ MAIN
 if __name__ == "__main__":
+    async def start_webhook(application):
+    await application.initialize()
+    await application.bot.set_webhook(f"{WEBHOOK_URL}/{BOT_TOKEN}")
+    await application.start()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("setfilename", set_filename))
@@ -348,6 +364,6 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_error_handler(error_handler)
-    print("🚀 Bot is running for everyone...")
-    app.run_polling()
-    
+    print("🚀 Bot running on Render (Webhook mode)")
+asyncio.run(start_webhook(app))
+flask_app.run(host="0.0.0.0", port=PORT)
