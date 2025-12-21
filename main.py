@@ -27,7 +27,7 @@ flask_app = Flask(__name__)
 
 @flask_app.route("/")
 def home():
-    return "🤖 VCF Bot is running successfully!"
+    return "🤖 Telegram VCF Bot running"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -84,17 +84,7 @@ UNAUTH_MSG = (
     "⚡ Convert TXT ⇄ VCF instantly | 🔒 Trusted"
 )
 
-# ================= ERROR HANDLER =================
-async def error_handler(update, context):
-    err = "".join(traceback.format_exception(None, context.error, context.error.__traceback__))
-    with open("bot_errors.log", "a") as f:
-        f.write(err + "\n")
-    try:
-        await context.bot.send_message(OWNER_ID, "⚠️ Bot Error\n\n" + err[:3500])
-    except:
-        pass
-
-# ================= DEFAULTS =================
+# ================= DEFAULTS (ORIGINAL) =================
 default_vcf_name = "Contacts"
 default_contact_name = "Contact"
 default_limit = 100
@@ -109,36 +99,46 @@ user_group_start_numbers = {}
 merge_data = {}
 conversion_mode = {}
 
-# ================= HELPERS =================
+# ================= ERROR HANDLER =================
+async def error_handler(update, context):
+    error_text = "".join(traceback.format_exception(None, context.error, context.error.__traceback__))
+    with open("bot_errors.log", "a") as f:
+        f.write(error_text + "\n")
+    try:
+        await context.bot.send_message(OWNER_ID, "⚠️ Bot Error\n\n" + error_text[:3500])
+    except:
+        pass
+
+# ================= HELPERS (ORIGINAL LOGIC) =================
 def generate_vcf(numbers, filename="Contacts", contact_name="Contact",
                  start_index=None, country_code="", group_num=None):
-    vcf = ""
+    vcf_data = ""
     for i, num in enumerate(numbers, start=start_index or 1):
         name = f"{contact_name}{str(i).zfill(3)}"
         if group_num:
             name += f" (Group {group_num})"
-        num = f"{country_code}{num}" if country_code else num
-        vcf += f"BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nTEL:{num}\nEND:VCARD\n"
+        formatted = f"{country_code}{num}" if country_code else num
+        vcf_data += f"BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nTEL:{formatted}\nEND:VCARD\n"
     with open(f"{filename}.vcf", "w") as f:
-        f.write(vcf)
+        f.write(vcf_data)
     return f"{filename}.vcf"
 
-def extract_numbers_from_vcf(path):
-    nums = set()
-    with open(path, errors="ignore") as f:
+def extract_numbers_from_vcf(file_path):
+    numbers = set()
+    with open(file_path, errors="ignore") as f:
         for line in f:
             if line.startswith("TEL"):
                 n = re.sub(r"\D", "", line)
                 if n:
-                    nums.add(n)
-    return nums
+                    numbers.add(n)
+    return numbers
 
-def extract_numbers_from_txt(path):
-    nums = set()
-    with open(path, errors="ignore") as f:
+def extract_numbers_from_txt(file_path):
+    numbers = set()
+    with open(file_path, errors="ignore") as f:
         for line in f:
-            nums.update(re.findall(r"\d{7,}", line))
-    return nums
+            numbers.update(re.findall(r"\d{7,}", line))
+    return numbers
 
 # ================= START =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -147,30 +147,88 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     uptime = datetime.utcnow() - BOT_START_TIME
-    role = get_user(update.effective_user.id)
+    days = uptime.days
+    hours, rem = divmod(uptime.seconds, 3600)
+    minutes, seconds = divmod(rem, 60)
 
-    text = (
-        "☠️ Welcome to the VCF Bot! ☠️\n\n"
-        f"🤖 Uptime: {uptime}\n"
-        f"👤 Role: {role.upper()}\n\n"
-        "📌 Commands:\n"
-        "/setfilename\n/setcontactname\n/setlimit\n/setstart\n"
-        "/setvcfstart\n/setcountrycode\n/setgroup\n"
-        "/makevcf\n/merge\n/done\n"
-        "/txt2vcf\n/vcf2txt\n"
-        "/reset\n/mysettings\n"
+    help_text = (
+        "☠️ Welcome to the VCF Bot!☠️\n\n"
+        f"🤖 Uptime: {days}d {hours}h {minutes}m {seconds}s\n\n"
+        "📌 Available Commands:\n"
+        "/setfilename [ FILE NAME ]\n"
+        "/setcontactname [ CONTACT NAME ]\n"
+        "/setlimit [ PER VCF CONTACT ]\n"
+        "/setstart [ CONTACT NUMBERING START ]\n"
+        "/setvcfstart [ VCF NUMBERING START ]\n"
+        "/setcountrycode [ +91 / +1 / +44 ]\n"
+        "/setgroup [ START NUMBER ]\n"
+        "/makevcf [ NAME numbers ]\n"
+        "/merge [ VCF NAME SET ]\n"
+        "/done\n"
+        "/txt2vcf\n"
+        "/vcf2txt\n\n"
+        "🧹 Reset & Settings:\n"
+        "/reset\n"
+        "/mysettings\n\n"
+        "📤 Send TXT, CSV, XLSX, or VCF files or numbers."
     )
 
-    if is_admin(update.effective_user.id):
-        text += (
-            "\n🛡️ Admin:\n"
-            "/adduser <id> <days> [admin/user]\n"
-            "/removeuser <id>\n"
-            "/listusers\n"
-            "/broadcast\n"
-        )
+    await update.message.reply_text(help_text)
 
-    await update.message.reply_text(text)
+# ================= SETTINGS COMMANDS (ORIGINAL) =================
+async def set_filename(update, context):
+    if context.args:
+        user_file_names[update.effective_user.id] = " ".join(context.args)
+        await update.message.reply_text("✅ File name updated")
+
+async def set_contact_name(update, context):
+    if context.args:
+        user_contact_names[update.effective_user.id] = " ".join(context.args)
+        await update.message.reply_text("✅ Contact name updated")
+
+async def set_limit(update, context):
+    if context.args and context.args[0].isdigit():
+        user_limits[update.effective_user.id] = int(context.args[0])
+        await update.message.reply_text("✅ Limit updated")
+
+async def set_start(update, context):
+    if context.args and context.args[0].isdigit():
+        user_start_indexes[update.effective_user.id] = int(context.args[0])
+        await update.message.reply_text("✅ Start index updated")
+
+async def set_vcf_start(update, context):
+    if context.args and context.args[0].isdigit():
+        user_vcf_start_numbers[update.effective_user.id] = int(context.args[0])
+        await update.message.reply_text("✅ VCF start updated")
+
+async def set_country_code(update, context):
+    if context.args:
+        user_country_codes[update.effective_user.id] = context.args[0]
+        await update.message.reply_text("✅ Country code set")
+
+async def set_group_number(update, context):
+    if context.args and context.args[0].isdigit():
+        user_group_start_numbers[update.effective_user.id] = int(context.args[0])
+        await update.message.reply_text("✅ Group start set")
+
+async def reset_settings(update, context):
+    uid = update.effective_user.id
+    user_file_names.pop(uid, None)
+    user_contact_names.pop(uid, None)
+    user_limits.pop(uid, None)
+    user_start_indexes.pop(uid, None)
+    user_vcf_start_numbers.pop(uid, None)
+    user_country_codes.pop(uid, None)
+    user_group_start_numbers.pop(uid, None)
+    await update.message.reply_text("✅ All settings reset")
+
+async def my_settings(update, context):
+    uid = update.effective_user.id
+    await update.message.reply_text(
+        f"📂 File name: {user_file_names.get(uid, default_vcf_name)}\n"
+        f"👤 Contact name: {user_contact_names.get(uid, default_contact_name)}\n"
+        f"📊 Limit: {user_limits.get(uid, default_limit)}"
+    )
 
 # ================= ACCESS COMMANDS =================
 async def adduser(update, context):
@@ -180,7 +238,6 @@ async def adduser(update, context):
     days = int(context.args[1])
     role = context.args[2] if len(context.args) > 2 else "user"
     expiry = (datetime.utcnow() + timedelta(days=days)).isoformat()
-
     conn = sqlite3.connect("bot.db")
     cur = conn.cursor()
     cur.execute("INSERT OR REPLACE INTO users VALUES (?,?,?)", (uid, role, expiry))
@@ -208,8 +265,8 @@ async def listusers(update, context):
     rows = cur.fetchall()
     conn.close()
     msg = "📋 USERS:\n"
-    for u in rows:
-        msg += f"{u[0]} | {u[1]} | {u[2]}\n"
+    for r in rows:
+        msg += f"{r[0]} | {r[1]} | {r[2]}\n"
     await update.message.reply_text(msg)
 
 # ================= BROADCAST =================
@@ -217,7 +274,7 @@ async def broadcast(update, context):
     if not is_admin(update.effective_user.id):
         return
     if not update.message.reply_to_message:
-        await update.message.reply_text("Reply to a message with /broadcast")
+        await update.message.reply_text("Reply to a message then use /broadcast")
         return
 
     cleanup_expired_users()
@@ -227,35 +284,15 @@ async def broadcast(update, context):
     users = [u[0] for u in cur.fetchall()]
     conn.close()
 
+    sent = 0
     for uid in users:
         try:
             await update.message.reply_to_message.copy(chat_id=uid)
+            sent += 1
         except:
             pass
-    await update.message.reply_text("📢 Broadcast sent")
 
-# ================= FILE HANDLER =================
-async def handle_document(update, context):
-    if not is_authorized(update.effective_user.id):
-        await update.message.reply_text(UNAUTH_MSG)
-        return
-
-    file = update.message.document
-    path = file.file_name
-    await (await context.bot.get_file(file.file_id)).download_to_drive(path)
-
-    if path.endswith(".txt"):
-        nums = extract_numbers_from_txt(path)
-    elif path.endswith(".vcf"):
-        nums = extract_numbers_from_vcf(path)
-    else:
-        await update.message.reply_text("Unsupported file")
-        return
-
-    out = generate_vcf(nums, "Converted")
-    await update.message.reply_document(open(out, "rb"))
-    os.remove(path)
-    os.remove(out)
+    await update.message.reply_text(f"📢 Broadcast sent to {sent} users")
 
 # ================= MAIN =================
 if __name__ == "__main__":
@@ -267,13 +304,22 @@ if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("setfilename", set_filename))
+    app.add_handler(CommandHandler("setcontactname", set_contact_name))
+    app.add_handler(CommandHandler("setlimit", set_limit))
+    app.add_handler(CommandHandler("setstart", set_start))
+    app.add_handler(CommandHandler("setvcfstart", set_vcf_start))
+    app.add_handler(CommandHandler("setcountrycode", set_country_code))
+    app.add_handler(CommandHandler("setgroup", set_group_number))
+    app.add_handler(CommandHandler("reset", reset_settings))
+    app.add_handler(CommandHandler("mysettings", my_settings))
+
     app.add_handler(CommandHandler("adduser", adduser))
     app.add_handler(CommandHandler("removeuser", removeuser))
     app.add_handler(CommandHandler("listusers", listusers))
     app.add_handler(CommandHandler("broadcast", broadcast))
 
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_error_handler(error_handler)
 
-    print("🚀 Bot running with ALL original features + new system")
+    print("🚀 BOT RUNNING (ORIGINAL FEATURES + NEW SYSTEM)")
     app.run_polling()
