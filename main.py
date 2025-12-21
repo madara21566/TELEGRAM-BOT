@@ -336,35 +336,51 @@ app = Flask(__name__)
 def home():
     return "Bot is running!"
 
-def run_bot():
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("setfilename", set_filename))
-    application.add_handler(CommandHandler("setcontactname", set_contact_name))
-    application.add_handler(CommandHandler("setlimit", set_limit))
-    application.add_handler(CommandHandler("setstart", set_start))
-    application.add_handler(CommandHandler("setvcfstart", set_vcf_start))
-    application.add_handler(CommandHandler("setcountrycode", set_country_code))
-    application.add_handler(CommandHandler("setgroup", set_group_number))
-    application.add_handler(CommandHandler("reset", reset_settings))
-    application.add_handler(CommandHandler("mysettings", my_settings))
-    application.add_handler(CommandHandler("makevcf", make_vcf_command))
-    application.add_handler(CommandHandler("merge", merge_command))
-    application.add_handler(CommandHandler("done", done_merge))
-    application.add_handler(CommandHandler("txt2vcf", txt2vcf))
-    application.add_handler(CommandHandler("vcf2txt", vcf2txt))
-    application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    application.add_error_handler(error_handler)
-    print("ðŸš€ Bot is running for everyone...")
-    application.run_polling()
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # Render env variable
 
-# âœ… MAIN
+application = ApplicationBuilder().token(BOT_TOKEN).build()
+
+# handlers
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("setfilename", set_filename))
+application.add_handler(CommandHandler("setcontactname", set_contact_name))
+application.add_handler(CommandHandler("setlimit", set_limit))
+application.add_handler(CommandHandler("setstart", set_start))
+application.add_handler(CommandHandler("setvcfstart", set_vcf_start))
+application.add_handler(CommandHandler("setcountrycode", set_country_code))
+application.add_handler(CommandHandler("setgroup", set_group_number))
+application.add_handler(CommandHandler("reset", reset_settings))
+application.add_handler(CommandHandler("mysettings", my_settings))
+application.add_handler(CommandHandler("makevcf", make_vcf_command))
+application.add_handler(CommandHandler("merge", merge_command))
+application.add_handler(CommandHandler("done", done_merge))
+application.add_handler(CommandHandler("txt2vcf", txt2vcf))
+application.add_handler(CommandHandler("vcf2txt", vcf2txt))
+application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+application.add_error_handler(error_handler)
+
+# Flask app
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot is running!"
+
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+async def webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, application.bot)
+    await application.process_update(update)
+    return "ok"
+
+async def on_startup():
+    await application.initialize()
+    await application.bot.set_webhook(f"{WEBHOOK_URL}/{BOT_TOKEN}")
+    await application.start()
+    print("✅ Webhook set & bot started")
+
 if __name__ == "__main__":
-    # Run bot in a separate thread
-    bot_thread = threading.Thread(target=run_bot)
-    bot_thread.start()
-    
-    # Run Flask app
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    port = int(os.environ.get("PORT", 10000))
+    asyncio.get_event_loop().run_until_complete(on_startup())
+    app.run(host="0.0.0.0", port=port)
